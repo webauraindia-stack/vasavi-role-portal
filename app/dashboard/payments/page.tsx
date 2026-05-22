@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PAYMENT_STATUS_COLORS } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,8 @@ import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 import { cn } from "@/lib/utils";
 
 export default function PaymentsPage() {
-  const { bookings, hotelId } = useManagerStore();
+  const { hotelId } = useHotelScope();
+  const { bookings } = useManagerStore();
   const filtered = getStoreBookings(hotelId, bookings);
 
   const summary = useMemo(() => {

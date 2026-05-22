@@ -10,12 +10,14 @@ import {
   CartesianGrid,
 } from "recharts";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { formatCurrency } from "@/lib/utils";
 import { MOCK_REVENUE } from "@/stores/manager-store";
 import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 
 export default function ReportsPage() {
-  const { bookings, hotelId } = useManagerStore();
+  const { hotelId } = useHotelScope();
+  const { bookings } = useManagerStore();
   const filtered = getStoreBookings(hotelId, bookings);
   const couponRedemptions = filtered.reduce((s, b) => s + b.appliedCoupons.length, 0);
   const freeStays = filtered.filter((b) => b.paymentStatus === "free_stay").length;

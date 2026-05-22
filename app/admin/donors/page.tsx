@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Archive, Check, Pause, Plus, Search } from "lucide-react";
 import { cn, formatDate, formatINR, sponsorshipLabel } from "@/lib/utils";
+import { Can } from "@/components/rbac/can";
+import { PermissionGuard } from "@/components/rbac/permission-guard";
 import type { DonorStatus } from "@/lib/donor-types";
 import { useAdminStore } from "@/stores/admin-store";
 
@@ -35,6 +37,7 @@ export default function DonorsListPage() {
   });
 
   return (
+    <PermissionGuard permission="donors.manage">
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -43,10 +46,12 @@ export default function DonorsListPage() {
             Create, approve, suspend, archive — full platform donor control
           </p>
         </div>
-        <Link href="/admin/donors/new" className="btn-admin flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Add donor
-        </Link>
+        <Can permission="donors.manage">
+          <Link href="/admin/donors/new" className="btn-admin flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add donor
+          </Link>
+        </Can>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -109,6 +114,7 @@ export default function DonorsListPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-start gap-2">
+              <Can permission="donors.manage">
               {d.status === "pending_approval" && (
                 <button
                   type="button"
@@ -136,6 +142,7 @@ export default function DonorsListPage() {
                   <Archive className="h-3.5 w-3.5" /> Archive
                 </button>
               )}
+              </Can>
               <Link href={`/admin/donors/${d.id}`} className="btn-admin text-xs py-1.5">
                 Manage
               </Link>
@@ -144,5 +151,6 @@ export default function DonorsListPage() {
         ))}
       </div>
     </div>
+    </PermissionGuard>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/rbac/permission-guard";
 import {
   Bar,
   BarChart,
@@ -17,6 +18,7 @@ export default function DonorAnalyticsPage() {
   const a = useDonorAnalytics();
 
   return (
+    <PermissionGuard permission="analytics.donations">
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -97,5 +99,6 @@ export default function DonorAnalyticsPage() {
         </div>
       </div>
     </div>
+    </PermissionGuard>
   );
 }

@@ -1,22 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Search, CheckCircle } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BookingDetailCard } from "@/components/dashboard/booking-table";
-import { useManagerStore } from "@/stores/manager-store";
+import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 import { GUEST_TYPE_COLORS } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 export default function CheckInPage() {
+  const { hotelId } = useHotelScope();
   const { bookings, updateBookingStatus } = useManagerStore();
+  const scopedBookings = useMemo(
+    () => getStoreBookings(hotelId, bookings),
+    [hotelId, bookings]
+  );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const match = bookings.find(
+  const match = scopedBookings.find(
     (b) =>
       b.reference.toLowerCase() === query.toLowerCase() ||
       b.qrCode.toLowerCase() === query.toLowerCase() ||
@@ -56,9 +62,15 @@ export default function CheckInPage() {
             </Button>
           </div>
           <p className="text-[10px] text-muted">
-            Try: VH-3N8Q1R, VH-7K2M9P, or +91 98480 12345
+            Only bookings at your property can be checked in here.
           </p>
         </div>
+
+        {query && !match && (
+          <p className="text-sm text-amber-800 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            No booking found at this property for that reference.
+          </p>
+        )}
 
         {match && (
           <>

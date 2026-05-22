@@ -1,21 +1,25 @@
 "use client";
 
 import Image from "next/image";
+import { Eye, Lock } from "lucide-react";
 import Link from "next/link";
-import { Eye, Lock, ExternalLink } from "lucide-react";
+import { Can } from "@/components/rbac/can";
+import { PermissionGuard } from "@/components/rbac/permission-guard";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getStoreBookings, getStoreDonors } from "@/stores/manager-store";
 import { useManagerStore } from "@/stores/manager-store";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
 
 export default function DonorsPage() {
-  const hotelId = useManagerStore((s) => s.hotelId);
+  const { hotelId } = useHotelScope();
   const bookings = useManagerStore((s) => s.bookings);
   const donors = getStoreDonors(hotelId, bookings);
   const hotelBookings = getStoreBookings(hotelId, bookings);
 
   return (
+    <PermissionGuard permission="donors.view">
     <>
       <DashboardHeader
         title="Donor verification"
@@ -31,13 +35,14 @@ export default function DonorsPage() {
               You cannot create, edit, delete, or modify donor balances, coupons, or
               platform policies. Use this view to verify eligibility during check-in.
             </p>
-            <Link
-              href="/admin/donors"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-champagne hover:underline"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open full donor management
-            </Link>
+            <Can permission="donors.manage">
+              <Link
+                href="/admin/donors"
+                className="mt-2 inline-flex text-xs font-bold text-champagne hover:underline"
+              >
+                Open full donor management →
+              </Link>
+            </Can>
           </div>
         </div>
       </div>
@@ -162,6 +167,7 @@ export default function DonorsPage() {
         </p>
       </div>
     </>
+    </PermissionGuard>
   );
 }
 

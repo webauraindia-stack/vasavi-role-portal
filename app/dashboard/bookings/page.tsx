@@ -1,62 +1,66 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { CalendarPlus } from "lucide-react";
+import Link from "next/link";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
-import { BookingTable } from "@/components/dashboard/booking-table";
+import { BookingList } from "@/components/dashboard/booking-table";
+import { ManualBookingTrigger } from "@/components/dashboard/manual-booking-dialog";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
+import { useExtensionStore } from "@/stores/extension-store";
 import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 
 export default function BookingsPage() {
-  const { bookings, hotelId, updateBookingStatus } = useManagerStore();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const { hotelId, hotelName, viewAll } = useHotelScope();
+  const { bookings, updateBookingStatus } = useManagerStore();
+  const { requests, fetchRequests } = useExtensionStore();
 
-  const filtered = useMemo(() => {
-    let list = getStoreBookings(hotelId, bookings);
-    if (statusFilter !== "all") {
-      list = list.filter((b) => b.bookingStatus === statusFilter);
-    }
-    if (typeFilter !== "all") {
-      list = list.filter((b) => b.guestType === typeFilter);
-    }
-    return list;
-  }, [bookings, hotelId, statusFilter, typeFilter]);
+  const loadExtensions = useCallback(() => {
+    void fetchRequests(hotelId);
+  }, [fetchRequests, hotelId]);
+
+  useEffect(() => {
+    loadExtensions();
+  }, [loadExtensions]);
+
+  const scopedBookings = useMemo(
+    () => getStoreBookings(hotelId, bookings),
+    [bookings, hotelId]
+  );
+
+  const scopedExtensions = useMemo(() => {
+    if (hotelId === "all") return requests;
+    return requests.filter((r) => r.hotelId === hotelId);
+  }, [requests, hotelId]);
 
   return (
     <>
       <DashboardHeader
         title="Bookings"
-        subtitle="Every website reservation with member ID, donor benefits, coupons, and payment status"
+        subtitle="Manage reservations, check-ins, and stay extensions from one place"
       />
-      <div className="p-6 space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold"
+      <div className="p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <ManualBookingTrigger
+            hotelId={hotelId}
+            hotelName={hotelName}
+            viewAll={viewAll}
+          />
+          <Link
+            href="/dashboard/extensions"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
           >
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="checked_in">Checked in</option>
-            <option value="checked_out">Checked out</option>
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-9 rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold"
-          >
-            <option value="all">All guest types</option>
-            <option value="visitor">Visitor</option>
-            <option value="vci_member">VCI Member</option>
-            <option value="kcgf_donor">KCGF Donor</option>
-            <option value="free_stay_eligible">Free stay</option>
-            <option value="compensation_holder">Compensation</option>
-            <option value="sponsorship_patron">Patron</option>
-          </select>
+            <CalendarPlus className="h-3.5 w-3.5" />
+            Extension queue
+          </Link>
         </div>
-        <div className="card-manager p-2">
-          <BookingTable bookings={filtered} onStatusChange={updateBookingStatus} />
-        </div>
+        <BookingList
+          bookings={scopedBookings}
+          extensions={scopedExtensions}
+          onStatusChange={updateBookingStatus}
+        />
       </div>
     </>
   );

@@ -1,10 +1,11 @@
 "use client";
 
-import { Bell, Radio, Search } from "lucide-react";
+import { Bell, Building2, Radio, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useManagerStore } from "@/stores/manager-store";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
+import { useManagerStore, getStoreNotifications } from "@/stores/manager-store";
 import { MANAGER_HOTELS } from "@/lib/data/mock-data";
 
 export function DashboardHeader({
@@ -14,16 +15,16 @@ export function DashboardHeader({
   title: string;
   subtitle?: string;
 }) {
+  const { hotelId, hotelLabel, locked, viewAll, setHotelId } = useHotelScope();
+  const notifications = useManagerStore((s) => s.notifications);
+  const scopedNotifications = getStoreNotifications(hotelId, notifications);
+  const unread = scopedNotifications.filter((n) => !n.read).length;
   const {
-    notifications,
     liveFeedEnabled,
     toggleLiveFeed,
     simulateIncomingBooking,
-    setHotelId,
-    hotelId,
     markAllNotificationsRead,
   } = useManagerStore();
-  const unread = notifications.filter((n) => !n.read).length;
 
   return (
     <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-beige/40 px-6 py-4">
@@ -31,6 +32,12 @@ export function DashboardHeader({
         <div>
           <h1 className="font-display text-2xl text-charcoal">{title}</h1>
           {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
+          {locked && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-champagne-dark">
+              <Building2 className="h-3.5 w-3.5" />
+              {hotelLabel}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -39,18 +46,24 @@ export function DashboardHeader({
             <Input placeholder="Search bookings, guests…" className="pl-9 w-56 h-9" />
           </div>
 
-          <select
-            value={hotelId}
-            onChange={(e) => setHotelId(e.target.value)}
-            className="h-9 rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold text-charcoal"
-          >
-            <option value="all">All properties</option>
-            {MANAGER_HOTELS.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.city}
-              </option>
-            ))}
-          </select>
+          {viewAll && setHotelId ? (
+            <select
+              value={hotelId}
+              onChange={(e) => setHotelId(e.target.value)}
+              className="h-9 rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold text-charcoal"
+            >
+              <option value="all">All properties</option>
+              {MANAGER_HOTELS.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.city}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="inline-flex h-9 items-center rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold text-charcoal">
+              {hotelLabel}
+            </span>
+          )}
 
           <Button
             variant={liveFeedEnabled ? "gold" : "outline"}

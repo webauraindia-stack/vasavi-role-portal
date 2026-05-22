@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -11,33 +12,48 @@ import {
   CartesianGrid,
 } from "recharts";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { StatsGrid } from "@/components/dashboard/stats-grid";
 import { BookingTable } from "@/components/dashboard/booking-table";
 import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
 import {
   useManagerStore,
   getStoreBookings,
+  getStoreRooms,
+  getStoreNotifications,
   MOCK_REVENUE,
 } from "@/stores/manager-store";
 
 export default function DashboardOverviewPage() {
+  const searchParams = useSearchParams();
+  const unauthorized = searchParams.get("error") === "unauthorized";
+  const { hotelId } = useHotelScope();
   const {
     bookings,
     rooms,
-    hotelId,
     notifications,
     markNotificationRead,
     updateBookingStatus,
   } = useManagerStore();
 
-  const filtered = useMemo(
-    () => getStoreBookings(hotelId, bookings).slice(0, 5),
+  const filteredBookings = useMemo(
+    () => getStoreBookings(hotelId, bookings),
     [hotelId, bookings]
   );
 
+  const filtered = useMemo(
+    () => filteredBookings.slice(0, 5),
+    [filteredBookings]
+  );
+
   const filteredRooms = useMemo(
-    () => (hotelId === "all" ? rooms : rooms.filter((r) => r.hotelId === hotelId)),
+    () => getStoreRooms(hotelId, rooms),
     [hotelId, rooms]
+  );
+
+  const scopedNotifications = useMemo(
+    () => getStoreNotifications(hotelId, notifications).slice(0, 6),
+    [hotelId, notifications]
   );
 
   return (
@@ -47,7 +63,12 @@ export default function DashboardOverviewPage() {
         subtitle="Real-time bookings, donor benefits, and occupancy — Vasavi community hospitality"
       />
       <div className="p-6 space-y-6">
-        <StatsGrid bookings={getStoreBookings(hotelId, bookings)} rooms={filteredRooms} />
+        {unauthorized && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            You tried to open a module your role cannot access. Use the sidebar for your assigned areas.
+          </div>
+        )}
+        <StatsGrid bookings={filteredBookings} rooms={filteredRooms} />
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 card-manager p-4">
@@ -61,7 +82,7 @@ export default function DashboardOverviewPage() {
           <div>
             <h2 className="font-display text-base mb-3">Alerts</h2>
             <NotificationsPanel
-              notifications={notifications.slice(0, 6)}
+              notifications={scopedNotifications}
               onMarkRead={markNotificationRead}
             />
           </div>

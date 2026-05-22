@@ -25,7 +25,8 @@ export type NotificationType =
   | "coupon_expiry"
   | "payment_pending"
   | "low_inventory"
-  | "festival_rush";
+  | "festival_rush"
+  | "stay_extension";
 
 export interface ManagerHotel {
   id: string;
@@ -136,6 +137,7 @@ export interface RoomInventory {
   maxOccupancy: number;
   isDonorExclusive: boolean;
   blockedReason?: string;
+  blockedUntil?: string;
   maintenanceUntil?: string;
 }
 
@@ -147,6 +149,7 @@ export interface ManagerNotification {
   time: string;
   read: boolean;
   priority: "low" | "medium" | "high";
+  hotelId: string;
 }
 
 export interface SupportTicket {
@@ -156,6 +159,7 @@ export interface SupportTicket {
   status: "open" | "in_progress" | "resolved";
   priority: "low" | "medium" | "high";
   createdAt: string;
+  hotelId: string;
 }
 
 export interface CommunityActivity {

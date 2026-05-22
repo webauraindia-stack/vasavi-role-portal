@@ -6,10 +6,7 @@ import { DONOR_ANALYTICS, INITIAL_DONORS } from "@/lib/data/mock-donors";
 import type { DonorStatus, PlatformDonor } from "@/lib/donor-types";
 
 interface AdminState {
-  isAuthenticated: boolean;
   donors: PlatformDonor[];
-  login: (pin: string) => boolean;
-  logout: () => void;
   updateDonorStatus: (id: string, status: DonorStatus) => void;
   updateDonor: (id: string, patch: Partial<PlatformDonor>) => void;
   addDonor: (donor: PlatformDonor) => void;
@@ -19,16 +16,7 @@ interface AdminState {
 export const useAdminStore = create<AdminState>()(
   persist(
     (set) => ({
-      isAuthenticated: false,
       donors: INITIAL_DONORS,
-
-      login: (pin) => {
-        if (pin !== "admin123" && pin !== "vasavi") return false;
-        set({ isAuthenticated: true });
-        return true;
-      },
-
-      logout: () => set({ isAuthenticated: false }),
 
       updateDonorStatus: (id, status) =>
         set((s) => ({
@@ -56,7 +44,7 @@ export const useAdminStore = create<AdminState>()(
           ),
         })),
     }),
-    { name: "vasavi-superadmin-donors" }
+    { name: "vasavi-donor-data" }
   )
 );
 

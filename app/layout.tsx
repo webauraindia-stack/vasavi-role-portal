@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cinzel, Marcellus, Inter } from "next/font/google";
+import { AppProviders } from "@/components/providers";
 import "./globals.css";
 
 const cinzel = Cinzel({
@@ -20,8 +21,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Vasavi Super Admin",
-  description: "Platform super admin and hotel operations for Vasavi community hotels",
+  title: "Vasavi Management Portal",
+  description: "Unified Super Admin & Admin portal with role-based access control",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${cinzel.variable} ${marcellus.variable} ${inter.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

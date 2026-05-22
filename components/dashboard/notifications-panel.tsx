@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bell,
   Calendar,
+  CalendarClock,
   Crown,
   Gift,
   Wallet,
@@ -19,6 +20,7 @@ const ICONS: Record<NotificationType, typeof Bell> = {
   payment_pending: Wallet,
   low_inventory: AlertTriangle,
   festival_rush: Bell,
+  stay_extension: CalendarClock,
 };
 
 export function NotificationsPanel({
