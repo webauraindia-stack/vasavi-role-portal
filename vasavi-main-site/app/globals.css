@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+@theme {
+  --color-white: #ffffff;
+  --color-surface: #fcf9f2; /* Highly elegant luxurious cream surface */
+  --color-charcoal: #2a1111; /* Luxurious deep maroon-toned charcoal body text */
+  --color-champagne: #7f1d1d; /* Deep Maroon */
+  --color-champagne-dark: #c9a84c; /* Temple Gold */
+  --color-beige: #f5e6ca; /* Sand Beige */
+  --color-muted: #4d3a3a; /* Stronger contrast for secondary text */
+  --font-display: var(--font-cinzel), var(--font-marcellus), serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --shadow-warm: 0 4px 24px rgba(127, 29, 29, 0.04);
+  --shadow-warm-md: 0 8px 32px rgba(127, 29, 29, 0.06);
+  --shadow-warm-lg: 0 16px 48px rgba(127, 29, 29, 0.08);
+}
+
+@layer base {
+  * {
+    @apply border-beige/30;
+  }
+
+  html {
+    @apply overflow-x-hidden;
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-white text-charcoal font-body text-base font-medium leading-relaxed antialiased overflow-x-hidden;
+  }
+
+  p,
+  li,
+  label,
+  dd,
+  dt {
+    @apply font-medium leading-relaxed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display text-champagne font-bold leading-tight;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 16px);
+  }
+
+  /* Icon-only controls keep compact sizing */
+  [data-icon-button] {
+    font-size: inherit;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      font-size: 1.0625rem;
+    }
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-champagne-dark;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shadow-warm {
+    box-shadow: var(--shadow-warm);
+  }
+
+  .shadow-warm-md {
+    box-shadow: var(--shadow-warm-md);
+  }
+
+  .shadow-warm-lg {
+    box-shadow: var(--shadow-warm-lg);
+  }
+
+  .card-surface {
+    @apply bg-surface rounded-xl shadow-warm border border-beige/40;
+  }
+
+  .navbar-glass {
+    @apply bg-white/90 backdrop-blur-xl border-b border-beige/25 shadow-warm;
+  }
+
+  .search-card {
+    @apply bg-white rounded-xl shadow-warm-md border border-beige/35;
+  }
+
+  .film-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(245, 230, 202, 0.4) 0%,
+      rgba(127, 29, 29, 0.06) 50%,
+      rgba(245, 230, 202, 0.4) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .gold-glow {
+    box-shadow: 0 0 0 1px rgba(201, 168, 76, 0.3),
+      0 8px 32px rgba(127, 29, 29, 0.05);
+  }
+
+  .tap-target {
+    @apply min-h-11 min-w-11;
+  }
+
+  /* Readable body copy — use on paragraphs site-wide */
+  .text-readable {
+    @apply text-base md:text-lg font-semibold text-charcoal leading-relaxed;
+  }
+
+  .text-caption {
+    @apply text-xs sm:text-sm font-semibold text-muted leading-snug;
+  }
+
+  .text-label {
+    @apply text-xs sm:text-sm font-bold uppercase tracking-wide text-muted;
+  }
+
+  /* Solid maroon surfaces — white text for contrast */
+  .bg-champagne {
+    color: #ffffff;
+  }
+
+  .bg-champagne.text-charcoal,
+  .bg-champagne.text-champagne,
+  .bg-champagne .text-charcoal,
+  .bg-champagne .text-champagne {
+    color: #ffffff !important;
+  }
+
+  .bg-champagne svg {
+    color: currentColor;
+  }
+}
+
+/* React Day Picker — heritage theme */
+.rdp-root {
+  --rdp-accent-color: #7f1d1d;
+  --rdp-accent-background-color: rgba(127, 29, 29, 0.08);
+  --rdp-day-height: 2.75rem;
+  --rdp-day-width: 2.75rem;
+  color: #2a1111;
+}
+
+.rdp-day_button {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.rdp-selected .rdp-day_button {
+  background-color: #7f1d1d !important;
+  color: #ffffff !important;
+}
+
+.rdp-range_middle .rdp-day_button {
+  background-color: rgba(127, 29, 29, 0.1) !important;
+}
+
+@media (min-width: 1024px) {
+  .rdp-root {
+    --rdp-day-height: 2.5rem;
+    --rdp-day-width: 2.5rem;
+  }
+
+  .rdp-months {
+    gap: 1.5rem;
+  }
+}

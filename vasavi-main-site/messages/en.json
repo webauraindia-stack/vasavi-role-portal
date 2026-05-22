@@ -1,0 +1,45 @@
+{
+  "nav": {
+    "hotels": "Guest Houses",
+    "donorProgram": "Donor Program",
+    "schemes": "Community Schemes",
+    "founder": "Our Founder",
+    "about": "About Us",
+    "contact": "Contact",
+    "search": "Search Rooms",
+    "login": "Login",
+    "logout": "Sign Out",
+    "myBookings": "My Bookings",
+    "myProfile": "My Profile",
+    "donorBenefits": "Donor Benefits"
+  },
+  "hero": {
+    "title": "Affordable Spiritual Stays",
+    "subtitle": "Simple, comfortable, and devotional guest houses for the Vysha community and families visiting sacred temple destinations.",
+    "cta": "Book Your Stay"
+  },
+  "features": {
+    "search": {
+      "title": "Search simply",
+      "description": "Find rooms across all 11 Vasavi guest houses in seconds — filter by city, dates, and room type."
+    },
+    "compare": {
+      "title": "Compare confidently",
+      "description": "Compare prices, amenities, and donor-exclusive rooms side by side before you book."
+    },
+    "save": {
+      "title": "Save more",
+      "description": "Unlock donor-tier discounts and community welfare rates on every spiritual stay."
+    }
+  },
+  "trust": {
+    "properties": "Community Guest Houses",
+    "devotees": "Happy Pilgrims",
+    "temples": "Temple Destinations",
+    "years": "Years Serving"
+  },
+  "hotels": {
+    "title": "Pilgrimage Stays",
+    "subtitle": "Discover our simple and affordable guest properties near major temple destinations."
+  }
+}

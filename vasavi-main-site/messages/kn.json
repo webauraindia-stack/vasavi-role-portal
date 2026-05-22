@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "hotels": "Hotels",
+    "donorProgram": "Donor Program",
+    "schemes": "Community Schemes",
+    "founder": "Our Founder",
+    "about": "About Us",
+    "contact": "Contact",
+    "search": "Search Rooms",
+    "login": "Login",
+    "logout": "Sign Out",
+    "myBookings": "My Bookings",
+    "myProfile": "My Profile",
+    "donorBenefits": "Donor Benefits"
+  },
+  "hero": {
+    "title": "Sacred Heritage Hospitality",
+    "subtitle": "Experience the calm devotional elegance of our temple-inspired stays, built for the Vysha community.",
+    "cta": "Book Your Stay"
+  },
+  "trust": {
+    "properties": "Sacred Properties",
+    "devotees": "Happy Devotees",
+    "temples": "Temple Destinations"
+  },
+  "hotels": {
+    "title": "Pilgrimage Destinations",
+    "subtitle": "Discover our sacred properties near major temple destinations."
+  }
+}

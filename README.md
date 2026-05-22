@@ -1,28 +1,31 @@
-# Vasavi Super Admin (`vasavi-superadmin`)
+# Vasavi Platform
 
-Platform **Super Admin** — hotel operations plus full **Donor Management System**.
+Next.js **16.0.1** · React **19** · App Router · Node **≥20.9**
 
-Renamed from `vasavi-hotel-manager`. Port **3001**.
+| Folder | Port | Purpose |
+|--------|------|---------|
+| **vasavi-main-site** | 3000 | Public booking website |
+| **vasavi-superadmin** | 3001 | Unified management portal (Super Admin + Admin) |
+
+## Requirements
+
+- Node.js 20.9 or later
+- npm 10+
 
 ## Run
 
 ```bash
-cd vasavi-superadmin
-npm install
-npm run dev
+# Public website
+cd vasavi-main-site && npm install && npm run dev
+
+# Management portal
+cd vasavi-superadmin && npm install && npm run dev
 ```
 
-| URL | Purpose |
-|-----|---------|
-| http://localhost:3001/login | Hotel manager PIN (`1234` / `vasavi`) |
-| http://localhost:3001/dashboard | Multi-hotel operations |
-| http://localhost:3001/admin/login | Super Admin PIN (`admin123` / `vasavi`) |
-| http://localhost:3001/admin/donors | Donor CRUD, coupons, analytics |
+## Migration
 
-## Related apps
+See [MIGRATION_REPORT.md](./MIGRATION_REPORT.md) for the Next.js 16 upgrade details.
 
-| Folder | Port |
-|--------|------|
-| `vasavi-main-site` | 3000 |
-| **`vasavi-superadmin`** | **3001** |
-| `vasavi-admin` | 3002 |
+## Archived folders
+
+`apps/`, `packages/`, and `vasavi-admin/` are legacy monorepo experiments — not used by the active apps above.
