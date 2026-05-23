@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { PAYMENT_STATUS_COLORS } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useManagerStore, getStoreBookings } from "@/stores/manager-store";

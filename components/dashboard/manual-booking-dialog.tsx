@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { format, addDays } from "date-fns";
 import {
   AlertCircle,
@@ -87,7 +87,12 @@ export function ManualBookingDialog({
     );
   }, [bookings, checkIn, checkOut, effectiveHotelId, rooms]);
 
-  const selectedRoom = rooms.find((r) => r.id === roomId);
+  const effectiveRoomId = useMemo(() => {
+    if (!roomId) return "";
+    return availableRooms.some((a) => a.room.id === roomId) ? roomId : "";
+  }, [availableRooms, roomId]);
+
+  const selectedRoom = rooms.find((r) => r.id === effectiveRoomId);
   const selectedAvailability = selectedRoom
     ? checkRoomAvailableForDates(selectedRoom, checkIn, checkOut, bookings)
     : null;
@@ -103,26 +108,13 @@ export function ManualBookingDialog({
     return calculateManualBookingPricing(selectedRoom, nights, guestType);
   }, [selectedRoom, checkIn, checkOut, guestType]);
 
-  useEffect(() => {
-    if (!open) return;
-    setPropertyId(hotelId === "all" ? "1" : hotelId);
-    setError(null);
-    setSuccessRef(null);
-  }, [open, hotelId]);
-
-  useEffect(() => {
-    if (roomId && !availableRooms.some((a) => a.room.id === roomId)) {
-      setRoomId("");
-    }
-  }, [availableRooms, roomId]);
-
   const handleSubmit = () => {
     setError(null);
     if (!guestName.trim() || !guestPhone.trim()) {
       setError("Guest name and phone are required.");
       return;
     }
-    if (!roomId) {
+    if (!effectiveRoomId) {
       setError("Select an available room.");
       return;
     }
@@ -139,7 +131,7 @@ export function ManualBookingDialog({
       guestPhone,
       memberId: memberId || undefined,
       guestType,
-      roomId,
+      roomId: effectiveRoomId,
       checkIn,
       checkOut,
       paymentStatus: guestType === "free_stay_eligible" ? "free_stay" : paymentStatus,
@@ -161,6 +153,7 @@ export function ManualBookingDialog({
   };
 
   const handleClose = () => {
+    setPropertyId(hotelId === "all" ? "1" : hotelId);
     setGuestName("");
     setGuestEmail("");
     setGuestPhone("");
@@ -332,7 +325,7 @@ export function ManualBookingDialog({
                         onClick={() => setRoomId(room.id)}
                         className={cn(
                           "flex items-center justify-between gap-3 rounded-lg border p-3 text-left text-sm transition-colors",
-                          roomId === room.id
+                          effectiveRoomId === room.id
                             ? "border-champagne bg-champagne/10"
                             : "border-beige/50 hover:border-champagne/40"
                         )}
@@ -430,7 +423,7 @@ export function ManualBookingDialog({
                 <Button
                   disabled={
                     submitting ||
-                    !roomId ||
+                    !effectiveRoomId ||
                     availableRooms.length === 0 ||
                     !guestName.trim() ||
                     !guestPhone.trim()
@@ -487,14 +480,23 @@ export function ManualBookingTrigger({
   viewAll: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   return (
     <Can permission="bookings.create">
-      <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        className="gap-1.5"
+        onClick={() => {
+          setFormKey((k) => k + 1);
+          setOpen(true);
+        }}
+      >
         <UserPlus className="h-3.5 w-3.5" />
         New walk-in booking
       </Button>
       <ManualBookingDialog
+        key={formKey}
         open={open}
         onClose={() => setOpen(false)}
         hotelId={hotelId}

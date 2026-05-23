@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { Search, CheckCircle } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useHotelScope } from "@/hooks/use-hotel-scope";

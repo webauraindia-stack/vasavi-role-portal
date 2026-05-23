@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Archive, Check, Pause, Plus, Search } from "lucide-react";
-import { cn, formatDate, formatINR, sponsorshipLabel } from "@/lib/utils";
+import { cn, formatINR, sponsorshipLabel } from "@/lib/utils";
 import { Can } from "@/components/rbac/can";
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import type { DonorStatus } from "@/lib/donor-types";
