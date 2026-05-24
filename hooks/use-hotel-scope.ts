@@ -13,6 +13,7 @@ import { useManagerStore } from "@/stores/manager-store";
 export function useHotelScope() {
   const user = useAuthUser();
   const storedHotelId = useManagerStore((s) => s.hotelId);
+  const branches = useManagerStore((s) => s.branches);
   const setHotelId = useManagerStore((s) => s.setHotelId);
 
   const viewAll = canViewAllHotels(user);
@@ -27,8 +28,9 @@ export function useHotelScope() {
 
   return {
     hotelId,
-    hotelName: user?.hotelName ?? getHotelName(hotelId),
-    hotelLabel: getHotelLabel(hotelId),
+    hotelName: user?.hotelName ?? getHotelName(hotelId, branches),
+    hotelLabel: getHotelLabel(hotelId, branches),
+    branches,
     locked,
     viewAll,
     setHotelId: viewAll ? setHotelId : undefined,

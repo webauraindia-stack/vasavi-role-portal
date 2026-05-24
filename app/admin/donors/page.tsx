@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useEffect, useState } from "react";
+import { DonorAvatar } from "@/components/ui/donor-avatar";
 import Link from "next/link";
 import { Archive, Check, Pause, Plus, Search } from "lucide-react";
 import { cn, formatINR, sponsorshipLabel } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { Can } from "@/components/rbac/can";
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import type { DonorStatus } from "@/lib/donor-types";
 import { useAdminStore } from "@/stores/admin-store";
+import { useAuthStore } from "@/stores/auth-store";
 
 const STATUS_FILTERS: (DonorStatus | "all")[] = [
   "all",
@@ -19,9 +20,17 @@ const STATUS_FILTERS: (DonorStatus | "all")[] = [
 ];
 
 export default function DonorsListPage() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   const donors = useAdminStore((s) => s.donors);
+  const isLoading = useAdminStore((s) => s.isLoading);
+  const loadError = useAdminStore((s) => s.loadError);
+  const loadDonors = useAdminStore((s) => s.loadDonors);
   const updateDonorStatus = useAdminStore((s) => s.updateDonorStatus);
   const archiveDonor = useAdminStore((s) => s.archiveDonor);
+
+  useEffect(() => {
+    if (accessToken) void loadDonors(accessToken, { force: true });
+  }, [accessToken, loadDonors]);
   const [filter, setFilter] = useState<(typeof STATUS_FILTERS)[number]>("all");
   const [q, setQ] = useState("");
 
@@ -81,11 +90,20 @@ export default function DonorsListPage() {
         </div>
       </div>
 
+      {loadError && (
+        <p className="mb-4 text-sm text-red-700">{loadError}</p>
+      )}
+      {isLoading && donors.length === 0 ? (
+        <p className="text-sm text-muted">Loading donors from API…</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-muted">No donors found.</p>
+      ) : null}
+
       <div className="space-y-3">
         {filtered.map((d) => (
           <div key={d.id} className="admin-card flex flex-wrap gap-4">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
-              <Image src={d.profilePhoto} alt={d.name} fill className="object-cover" sizes="64px" />
+              <DonorAvatar name={d.name} src={d.profilePhoto} sizes="64px" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -118,7 +136,9 @@ export default function DonorsListPage() {
               {d.status === "pending_approval" && (
                 <button
                   type="button"
-                  onClick={() => updateDonorStatus(d.id, "active")}
+                  onClick={() =>
+                    accessToken && void updateDonorStatus(accessToken, d.id, "active")
+                  }
                   className="btn-outline flex items-center gap-1 text-xs text-emerald-700"
                 >
                   <Check className="h-3.5 w-3.5" /> Approve
@@ -127,7 +147,9 @@ export default function DonorsListPage() {
               {d.status === "active" && (
                 <button
                   type="button"
-                  onClick={() => updateDonorStatus(d.id, "suspended")}
+                  onClick={() =>
+                    accessToken && void updateDonorStatus(accessToken, d.id, "suspended")
+                  }
                   className="btn-outline flex items-center gap-1 text-xs"
                 >
                   <Pause className="h-3.5 w-3.5" /> Suspend

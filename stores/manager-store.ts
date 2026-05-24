@@ -1,39 +1,54 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  CommunityActivity,
+  DonorProfile,
   ManagerBooking,
+  ManagerHotel,
   ManagerNotification,
+  MemberProfile,
   RoomInventory,
+  SupportTicket,
 } from "@/lib/types";
 import {
   buildManualBooking,
   shouldMarkRoomOccupied,
   type ManualBookingInput,
 } from "@/lib/booking/manual-booking";
+import { notificationsFromBookings } from "@/lib/analytics/notifications";
+import { listManagerHotels } from "@/lib/api/branches";
 import {
-  DEFAULT_HOTEL_ID,
-  INCOMING_BOOKING_TEMPLATE,
-  MANAGER_HOTELS,
-  MOCK_ACTIVITIES,
-  MOCK_BOOKINGS,
-  MOCK_DONORS,
-  MOCK_MEMBERS,
-  MOCK_NOTIFICATIONS,
-  MOCK_REVENUE,
-  MOCK_ROOMS,
-  MOCK_TICKETS,
-} from "@/lib/data/mock-data";
+  createBooking,
+  listBookings,
+  mapManagerBooking,
+  recordCashPaymentApi,
+  updateBookingStatusApi,
+} from "@/lib/api/bookings";
+import { listRoomInventory } from "@/lib/api/properties";
+import {
+  listDonors,
+  mapListDonorToPlatform,
+  type BackendDonorListItem,
+} from "@/lib/api/donors";
+import { useAuthStore } from "@/stores/auth-store";
+
+let refreshInFlight: Promise<void> | null = null;
 
 interface ManagerState {
   hotelId: string;
-  managerName: string;
+  branches: ManagerHotel[];
   bookings: ManagerBooking[];
   rooms: RoomInventory[];
+  donors: BackendDonorListItem[];
   notifications: ManagerNotification[];
-  liveFeedEnabled: boolean;
+  dataLoaded: boolean;
+  dataError: string | null;
+  isRefreshing: boolean;
 
   setHotelId: (id: string) => void;
+  refreshFromApi: (accessToken: string) => Promise<void>;
   updateBookingStatus: (id: string, status: ManagerBooking["bookingStatus"]) => void;
+  recordCashPayment: (bookingId: string, notes?: string) => Promise<{ ok: boolean; error?: string }>;
   assignRoom: (bookingId: string, roomNumber: string) => void;
   setRoomStatus: (roomId: string, status: RoomInventory["status"], meta?: Partial<RoomInventory>) => void;
   extendRoomHold: (roomId: string, untilDate: string) => void;
@@ -55,33 +70,134 @@ interface ManagerState {
   }) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
-  simulateIncomingBooking: () => void;
   createManualBooking: (
     input: ManualBookingInput
-  ) => { success: boolean; error?: string; booking?: ManagerBooking };
-  toggleLiveFeed: () => void;
+  ) => Promise<{ success: boolean; error?: string; booking?: ManagerBooking }>;
 }
-
-let liveInterval: ReturnType<typeof setInterval> | null = null;
 
 export const useManagerStore = create<ManagerState>()(
   persist(
     (set, get) => ({
-      hotelId: DEFAULT_HOTEL_ID,
-      managerName: "Ramesh Kumar",
-      bookings: MOCK_BOOKINGS,
-      rooms: MOCK_ROOMS,
-      notifications: MOCK_NOTIFICATIONS,
-      liveFeedEnabled: false,
+      hotelId: "all",
+      branches: [],
+      bookings: [],
+      rooms: [],
+      donors: [],
+      notifications: [],
+      dataLoaded: false,
+      dataError: null,
+      isRefreshing: false,
 
       setHotelId: (hotelId) => set({ hotelId }),
 
-      updateBookingStatus: (id, bookingStatus) =>
+      refreshFromApi: async (accessToken) => {
+        if (refreshInFlight) {
+          await refreshInFlight;
+          return;
+        }
+
+        refreshInFlight = (async () => {
+          set({ isRefreshing: true, dataError: null });
+          try {
+            const [branches, bookings] = await Promise.all([
+              listManagerHotels(accessToken),
+              listBookings(accessToken),
+            ]);
+
+            let donors: BackendDonorListItem[] = [];
+            try {
+              donors = await listDonors(accessToken);
+            } catch {
+              donors = [];
+            }
+
+            const branchFilter =
+              get().hotelId !== "all" ? get().hotelId : undefined;
+            const rooms = await listRoomInventory(
+              accessToken,
+              bookings,
+              branchFilter
+            );
+
+            const notifications = notificationsFromBookings(bookings);
+
+            set({
+              branches,
+              bookings,
+              rooms,
+              donors,
+              notifications,
+              dataLoaded: true,
+              dataError: null,
+              isRefreshing: false,
+            });
+          } catch (err) {
+            set({
+              dataError: err instanceof Error ? err.message : "Could not load data.",
+              dataLoaded: true,
+              isRefreshing: false,
+            });
+          }
+        })();
+
+        try {
+          await refreshInFlight;
+        } finally {
+          refreshInFlight = null;
+        }
+      },
+
+      updateBookingStatus: (id, bookingStatus) => {
         set({
           bookings: get().bookings.map((b) =>
             b.id === id ? { ...b, bookingStatus } : b
           ),
-        }),
+        });
+        const token = useAuthStore.getState().accessToken;
+        if (token) {
+          const backendStatus =
+            bookingStatus === "checked_in"
+              ? "checked_in"
+              : bookingStatus === "checked_out"
+                ? "checked_out"
+                : bookingStatus === "cancelled"
+                  ? "cancelled"
+                  : bookingStatus === "confirmed"
+                    ? "confirmed"
+                    : "pending";
+          void updateBookingStatusApi(
+            token,
+            id,
+            backendStatus,
+            bookingStatus === "cancelled" ? "Cancelled from portal" : undefined
+          )
+            .then(() => get().refreshFromApi(token))
+            .catch(() => {
+              /* optimistic UI kept */
+            });
+        }
+      },
+
+      recordCashPayment: async (bookingId, notes) => {
+        const token = useAuthStore.getState().accessToken;
+        if (!token) {
+          return { ok: false, error: "Not signed in." };
+        }
+        try {
+          const updated = await recordCashPaymentApi(token, bookingId, notes);
+          const mapped = mapManagerBooking(updated);
+          set({
+            bookings: get().bookings.map((b) => (b.id === bookingId ? mapped : b)),
+          });
+          await get().refreshFromApi(token);
+          return { ok: true };
+        } catch (err) {
+          return {
+            ok: false,
+            error: err instanceof Error ? err.message : "Could not record cash payment.",
+          };
+        }
+      },
 
       assignRoom: (bookingId, roomNumber) =>
         set({
@@ -99,16 +215,6 @@ export const useManagerStore = create<ManagerState>()(
               delete next.blockedReason;
               delete next.blockedUntil;
               delete next.maintenanceUntil;
-            }
-            if (status === "blocked" && !next.blockedUntil) {
-              const d = new Date();
-              d.setDate(d.getDate() + 3);
-              next.blockedUntil = d.toISOString().slice(0, 10);
-            }
-            if (status === "maintenance" && !next.maintenanceUntil) {
-              const d = new Date();
-              d.setDate(d.getDate() + 7);
-              next.maintenanceUntil = d.toISOString().slice(0, 10);
             }
             return next;
           }),
@@ -148,32 +254,22 @@ export const useManagerStore = create<ManagerState>()(
           }),
         }),
 
-      applyStayExtension: ({
-        bookingId,
-        newCheckOut,
-        roomNumber,
-        extraAmount = 0,
-        guestName,
-        reference,
-        hotelId,
-      }) =>
+      applyStayExtension: (payload) => {
         set({
           bookings: get().bookings.map((b) => {
-            if (b.id !== bookingId) return b;
+            if (b.id !== payload.bookingId) return b;
             const checkIn = new Date(b.checkIn);
-            const checkOut = new Date(newCheckOut);
+            const checkOut = new Date(payload.newCheckOut);
             const nights = Math.max(
               1,
               Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24))
             );
             return {
               ...b,
-              checkOut: newCheckOut,
-              roomNumber: roomNumber ?? b.roomNumber,
+              checkOut: payload.newCheckOut,
+              roomNumber: payload.roomNumber ?? b.roomNumber,
               nights,
-              total: b.total + extraAmount,
-              paymentStatus:
-                extraAmount > 0 && b.paymentStatus === "paid" ? "partial" : b.paymentStatus,
+              total: b.total + (payload.extraAmount ?? 0),
             };
           }),
           notifications: [
@@ -181,28 +277,33 @@ export const useManagerStore = create<ManagerState>()(
               id: `n-ext-${Date.now()}`,
               type: "stay_extension",
               title: "Stay extension completed",
-              message: `${guestName} (${reference}) checkout updated to ${newCheckOut}.`,
+              message: `${payload.guestName} (${payload.reference}) checkout updated to ${payload.newCheckOut}.`,
               time: new Date().toISOString(),
               read: false,
               priority: "medium",
-              hotelId,
+              hotelId: payload.hotelId,
             },
             ...get().notifications,
           ],
-        }),
+        });
+        const token = useAuthStore.getState().accessToken;
+        if (token) {
+          void get().refreshFromApi(token);
+        }
+      },
 
-      pushExtensionNotification: ({ hotelId, guestName, reference, status }) =>
+      pushExtensionNotification: (payload) =>
         set({
           notifications: [
             {
               id: `n-ext-req-${Date.now()}`,
               type: "stay_extension",
               title: "Stay extension request",
-              message: `${guestName} (${reference}) — status: ${status.replace(/_/g, " ")}`,
+              message: `${payload.guestName} (${payload.reference}) — status: ${payload.status.replace(/_/g, " ")}`,
               time: new Date().toISOString(),
               read: false,
-              priority: status.includes("pending") ? "high" : "medium",
-              hotelId,
+              priority: statusIncludesPending(payload.status) ? "high" : "medium",
+              hotelId: payload.hotelId,
             },
             ...get().notifications,
           ],
@@ -220,40 +321,32 @@ export const useManagerStore = create<ManagerState>()(
           notifications: get().notifications.map((n) => ({ ...n, read: true })),
         }),
 
-      simulateIncomingBooking: () => {
-        const { hotelId } = get();
-        const effectiveId = hotelId === "all" ? DEFAULT_HOTEL_ID : hotelId;
-        const property = MANAGER_HOTELS.find((h) => h.id === effectiveId) ?? MANAGER_HOTELS[0];
-        const ref = `VH-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-        const booking: ManagerBooking = {
-          ...INCOMING_BOOKING_TEMPLATE,
-          id: `bk-live-${Date.now()}`,
-          reference: ref,
-          qrCode: ref,
-          hotelId: property.id,
-          hotelName: property.name,
-          createdAt: new Date().toISOString(),
-        };
-        const notification: ManagerNotification = {
-          id: `n-live-${Date.now()}`,
-          type: "new_booking",
-          title: "Live booking from website",
-          message: `${booking.guestName} — ${booking.roomType}, ${booking.nights} night(s).`,
-          time: new Date().toISOString(),
-          read: false,
-          priority: "high",
-          hotelId: property.id,
-        };
-        set({
-          bookings: [booking, ...get().bookings],
-          notifications: [notification, ...get().notifications],
-        });
-      },
-
-      createManualBooking: (input) => {
+      createManualBooking: async (input) => {
+        const token = useAuthStore.getState().accessToken;
         const room = get().rooms.find((r) => r.id === input.roomId);
         if (!room) {
           return { success: false, error: "Selected room not found." };
+        }
+
+        if (token) {
+          try {
+            const created = await createBooking(token, {
+              room_id: room.id,
+              check_in_date: input.checkIn,
+              check_out_date: input.checkOut,
+              guest_count: 2,
+              guest_name: input.guestName,
+              guest_phone: input.guestPhone,
+              notes: input.specialRequests,
+            });
+            await get().refreshFromApi(token);
+            return { success: true, booking: created };
+          } catch (err) {
+            return {
+              success: false,
+              error: err instanceof Error ? err.message : "Could not create booking.",
+            };
+          }
         }
 
         const { booking, error } = buildManualBooking(input, room, get().bookings);
@@ -261,72 +354,24 @@ export const useManagerStore = create<ManagerState>()(
           return { success: false, error: error ?? "Could not create booking." };
         }
 
-        const notification: ManagerNotification = {
-          id: `n-manual-${Date.now()}`,
-          type: "new_booking",
-          title: input.source === "phone" ? "Phone booking created" : "Walk-in booking created",
-          message: `${booking.guestName} — Room ${room.number}, ${booking.nights} night(s). Ref ${booking.reference}.`,
-          time: new Date().toISOString(),
-          read: false,
-          priority: "high",
-          hotelId: input.hotelId,
-        };
-
         const markOccupied = shouldMarkRoomOccupied(booking.bookingStatus, booking.checkIn);
-
         set({
           bookings: [booking, ...get().bookings],
-          notifications: [notification, ...get().notifications],
           rooms: markOccupied
             ? get().rooms.map((r) =>
                 r.id === room.id ? { ...r, status: "occupied" as const } : r
               )
             : get().rooms,
         });
-
         return { success: true, booking };
-      },
-
-      toggleLiveFeed: () => {
-        const next = !get().liveFeedEnabled;
-        set({ liveFeedEnabled: next });
-        if (liveInterval) {
-          clearInterval(liveInterval);
-          liveInterval = null;
-        }
-        if (next && typeof window !== "undefined") {
-          liveInterval = setInterval(() => {
-            if (Math.random() > 0.7) get().simulateIncomingBooking();
-          }, 45000);
-        }
       },
     }),
     { name: "vasavi-manager-data", partialize: (s) => ({ hotelId: s.hotelId }) }
   )
 );
 
-/** Hotel managers see only donors with bookings or history at their property */
-export function getStoreDonors(hotelId: string, bookings: ManagerBooking[]) {
-  if (hotelId === "all") return MOCK_DONORS;
-
-  const hotelBookings = bookings.filter((b) => b.hotelId === hotelId);
-  const refsAtHotel = new Set(hotelBookings.map((b) => b.reference));
-  const memberIdsAtHotel = new Set(
-    hotelBookings.filter((b) => b.memberId).map((b) => b.memberId!)
-  );
-
-  return MOCK_DONORS.filter(
-    (d) =>
-      memberIdsAtHotel.has(d.donorId) ||
-      d.hotelBookingHistory.some((h) => refsAtHotel.has(h.bookingRef)) ||
-      (d.hotelId === hotelId && d.hotelBookingHistory.length > 0)
-  ).map((d) => ({
-    ...d,
-    hotelBookingHistory: d.hotelBookingHistory.filter((h) =>
-      refsAtHotel.has(h.bookingRef)
-    ),
-    usageHistory: d.usageHistory.filter((u) => refsAtHotel.has(u.bookingRef)),
-  }));
+function statusIncludesPending(status: string): boolean {
+  return status.includes("pending");
 }
 
 export function getStoreBookings(hotelId: string, bookings: ManagerBooking[]) {
@@ -339,22 +384,81 @@ export function getStoreRooms(hotelId: string, rooms: RoomInventory[]) {
   return rooms.filter((r) => r.hotelId === hotelId);
 }
 
-export function getStoreMembers(hotelId: string, bookings: ManagerBooking[]) {
-  if (hotelId === "all") return MOCK_MEMBERS;
-  const memberIds = new Set(
-    bookings.filter((b) => b.hotelId === hotelId && b.memberId).map((b) => b.memberId!)
+export function getStoreDonors(hotelId: string, bookings: ManagerBooking[]) {
+  const store = useManagerStore.getState();
+  const platformDonors = store.donors.map(mapListDonorToPlatform);
+
+  if (hotelId === "all") {
+    return platformDonors.map(mapPlatformDonorToManagerDonor);
+  }
+
+  const hotelBookings = bookings.filter((b) => b.hotelId === hotelId);
+  const phonesAtHotel = new Set(
+    hotelBookings.filter((b) => b.guestType === "kcgf_donor").map((b) => b.guestPhone)
   );
-  return MOCK_MEMBERS.filter((m) => memberIds.has(m.memberId));
+
+  return platformDonors
+    .filter((d) => phonesAtHotel.has(d.phone.replace(/\s/g, "")) || phonesAtHotel.has(d.phone))
+    .map(mapPlatformDonorToManagerDonor);
 }
 
-export function getStoreTickets(hotelId: string) {
-  if (hotelId === "all") return MOCK_TICKETS;
-  return MOCK_TICKETS.filter((t) => t.hotelId === hotelId);
+function mapPlatformDonorToManagerDonor(d: ReturnType<typeof mapListDonorToPlatform>): DonorProfile {
+  return {
+    id: d.id,
+    donorId: d.donorId,
+    name: d.name,
+    email: d.email,
+    phone: d.phone,
+    avatarUrl: d.profilePhoto,
+    tier: d.membershipLevel,
+    donationCategory: d.donationCategory,
+    sponsorshipTypes: d.sponsorshipTypes,
+    totalDonation: d.totalContribution,
+    annadanamContribution: 0,
+    sponsoredRooms: [],
+    freeStaysRemaining: d.freeStayAllocation,
+    compensationBalance: d.compensationAllocation,
+    freeStayEligible: d.freeStayAllocation > 0,
+    donorSponsored: false,
+    activeCoupons: 0,
+    hotelId: "",
+    remainingEligibility: "",
+    usageHistory: [],
+    hotelBookingHistory: [],
+  };
 }
 
-export function getStoreActivities(hotelId: string) {
-  if (hotelId === "all") return MOCK_ACTIVITIES;
-  return MOCK_ACTIVITIES.filter((a) => a.hotelId === hotelId);
+export function getStoreMembers(hotelId: string, bookings: ManagerBooking[]): MemberProfile[] {
+  const scoped =
+    hotelId === "all" ? bookings : bookings.filter((b) => b.hotelId === hotelId);
+  const seen = new Set<string>();
+
+  return scoped
+    .filter((b) => b.memberId || b.guestType === "kcgf_donor")
+    .map((b) => ({
+      id: b.memberId ?? b.id,
+      memberId: b.memberId ?? b.reference,
+      name: b.guestName,
+      clubName: "Vasavi Community",
+      category: b.guestTypeLabel,
+      phone: b.guestPhone,
+      freeStaysRemaining: 0,
+      compensationBalance: 0,
+      status: "active" as const,
+    }))
+    .filter((m) => {
+      if (seen.has(m.memberId)) return false;
+      seen.add(m.memberId);
+      return true;
+    });
+}
+
+export function getStoreTickets(): SupportTicket[] {
+  return [];
+}
+
+export function getStoreActivities(): CommunityActivity[] {
+  return [];
 }
 
 export function getStoreNotifications(
@@ -365,4 +469,4 @@ export function getStoreNotifications(
   return notifications.filter((n) => n.hotelId === hotelId);
 }
 
-export { MOCK_DONORS, MOCK_MEMBERS, MOCK_TICKETS, MOCK_ACTIVITIES, MOCK_REVENUE };
+export { revenueFromBookings } from "@/lib/analytics/revenue";

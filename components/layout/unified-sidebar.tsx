@@ -20,6 +20,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Ticket,
   UserCog,
   Users,
   Wallet,
@@ -49,12 +50,14 @@ const ICONS: Record<string, LucideIcon> = {
   Heart,
   FileText,
   Wallet,
+  Ticket,
 };
 
 const PLATFORM_HREFS = new Set([
   "/admin/donations",
   "/admin/donors",
   "/admin/donors/analytics",
+  "/admin/coupons",
   "/admin/cms",
   "/admin/finance",
   "/admin/extensions",

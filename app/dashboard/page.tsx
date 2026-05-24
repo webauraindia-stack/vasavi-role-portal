@@ -21,7 +21,7 @@ import {
   getStoreBookings,
   getStoreRooms,
   getStoreNotifications,
-  MOCK_REVENUE,
+  revenueFromBookings,
 } from "@/stores/manager-store";
 
 export default function DashboardOverviewPage() {
@@ -34,6 +34,9 @@ export default function DashboardOverviewPage() {
     notifications,
     markNotificationRead,
     updateBookingStatus,
+    dataLoaded,
+    isRefreshing,
+    dataError,
   } = useManagerStore();
 
   const filteredBookings = useMemo(
@@ -56,6 +59,11 @@ export default function DashboardOverviewPage() {
     [hotelId, notifications]
   );
 
+  const revenueChart = useMemo(
+    () => revenueFromBookings(filteredBookings),
+    [filteredBookings]
+  );
+
   return (
     <>
       <DashboardHeader
@@ -63,6 +71,14 @@ export default function DashboardOverviewPage() {
         subtitle="Real-time bookings, donor benefits, and occupancy — Vasavi community hospitality"
       />
       <div className="p-6 space-y-6">
+        {!dataLoaded && isRefreshing && (
+          <p className="text-sm text-muted">Loading live data from server…</p>
+        )}
+        {dataError && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {dataError}
+          </p>
+        )}
         {unauthorized && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             You tried to open a module your role cannot access. Use the sidebar for your assigned areas.
@@ -92,7 +108,7 @@ export default function DashboardOverviewPage() {
           <h2 className="font-display text-base mb-4">7-day revenue & donor savings</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={MOCK_REVENUE}>
+              <BarChart data={revenueChart}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f5e6ca" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />

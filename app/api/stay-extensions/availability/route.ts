@@ -3,9 +3,16 @@ import {
   calculateExtensionPricing,
   checkRoomAvailabilityForExtension,
 } from "@/lib/stay-extension/engine";
-import { MOCK_BOOKINGS, MOCK_ROOMS } from "@/lib/data/mock-data";
+import { resolveAccessToken } from "@/lib/api/server-backend";
+import { getBookingByReference, listBookings } from "@/lib/api/bookings";
+import { listRoomInventory } from "@/lib/api/properties";
 
 export async function GET(request: Request) {
+  const token = await resolveAccessToken(request);
+  if (!token) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const bookingReference = searchParams.get("bookingReference");
   const requestedCheckOut = searchParams.get("requestedCheckOut");
@@ -17,30 +24,40 @@ export async function GET(request: Request) {
     );
   }
 
-  const booking = MOCK_BOOKINGS.find((b) => b.reference === bookingReference);
-  if (!booking) {
-    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  try {
+    const booking = await getBookingByReference(token, bookingReference);
+    if (!booking) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    const allBookings = await listBookings(token);
+    const rooms = await listRoomInventory(token, allBookings);
+
+    const availability = checkRoomAvailabilityForExtension(
+      booking,
+      requestedCheckOut,
+      allBookings,
+      rooms
+    );
+    const pricing =
+      availability.available || availability.alternatives.length
+        ? calculateExtensionPricing(booking, requestedCheckOut)
+        : null;
+
+    return NextResponse.json({
+      data: {
+        available: availability.available,
+        status: availability.status,
+        conflictReason: availability.conflictReason,
+        alternatives: availability.alternatives,
+        pricing,
+        originalCheckOut: booking.checkOut,
+      },
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Availability check failed" },
+      { status: 500 }
+    );
   }
-
-  const availability = checkRoomAvailabilityForExtension(
-    booking,
-    requestedCheckOut,
-    MOCK_BOOKINGS,
-    MOCK_ROOMS
-  );
-  const pricing =
-    availability.available || availability.alternatives.length
-      ? calculateExtensionPricing(booking, requestedCheckOut)
-      : null;
-
-  return NextResponse.json({
-    data: {
-      available: availability.available,
-      status: availability.status,
-      conflictReason: availability.conflictReason,
-      alternatives: availability.alternatives,
-      pricing,
-      originalCheckOut: booking.checkOut,
-    },
-  });
 }

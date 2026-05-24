@@ -8,7 +8,7 @@ const globalStore = globalThis as unknown as {
 
 function getStore(): StayExtensionRequest[] {
   if (!globalStore.stayExtensions) {
-    globalStore.stayExtensions = seedDemoExtensions();
+    globalStore.stayExtensions = [];
   }
   return globalStore.stayExtensions;
 }

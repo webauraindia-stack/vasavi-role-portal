@@ -2,6 +2,34 @@
 
 import { create } from "zustand";
 import type { StayExtensionRequest } from "@/lib/stay-extension/types";
+import { refreshStaffToken } from "@/lib/api/staff-auth";
+import { isJwtExpired } from "@/lib/auth/jwt";
+import { useAuthStore } from "@/stores/auth-store";
+
+async function validStaffAccessToken(): Promise<string | null> {
+  let token = useAuthStore.getState().accessToken;
+  if (token && !isJwtExpired(token)) return token;
+
+  try {
+    const refreshed = await refreshStaffToken();
+    useAuthStore.setState({ accessToken: refreshed.access });
+    return refreshed.access;
+  } catch {
+    return token && !isJwtExpired(token, 0) ? token : null;
+  }
+}
+
+async function extensionFetchInit(init?: RequestInit): Promise<RequestInit> {
+  const token = await validStaffAccessToken();
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return { ...init, credentials: "include", headers };
+}
 
 interface ExtensionState {
   requests: StayExtensionRequest[];
@@ -36,7 +64,7 @@ export const useExtensionStore = create<ExtensionState>((set) => ({
     set({ loading: true, error: null });
     try {
       const qs = hotelId && hotelId !== "all" ? `?hotelId=${hotelId}` : "";
-      const res = await fetch(`/api/stay-extensions${qs}`);
+      const res = await fetch(`/api/stay-extensions${qs}`, await extensionFetchInit());
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to load extensions");
       set({ requests: json.data ?? [], loading: false });
@@ -51,11 +79,13 @@ export const useExtensionStore = create<ExtensionState>((set) => ({
   createRequest: async (payload) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch("/api/stay-extensions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        "/api/stay-extensions",
+        await extensionFetchInit({
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to create extension");
       const created = json.data as StayExtensionRequest;
@@ -76,11 +106,13 @@ export const useExtensionStore = create<ExtensionState>((set) => ({
   patchRequest: async (payload) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch("/api/stay-extensions", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        "/api/stay-extensions",
+        await extensionFetchInit({
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        })
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to update extension");
       const updated = json.data as StayExtensionRequest;

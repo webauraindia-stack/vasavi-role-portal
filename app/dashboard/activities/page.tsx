@@ -15,7 +15,7 @@ const ICONS = {
 
 export default function ActivitiesPage() {
   const { hotelId } = useHotelScope();
-  const activities = getStoreActivities(hotelId);
+  const activities = getStoreActivities();
 
   return (
     <>
@@ -25,7 +25,9 @@ export default function ActivitiesPage() {
       />
       <div className="p-6">
         {activities.length === 0 ? (
-          <p className="text-sm text-muted">No community activities scheduled at this property.</p>
+          <p className="text-sm text-muted">
+            No community activities in the API yet — events will appear here when wired.
+          </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {activities.map((a) => {

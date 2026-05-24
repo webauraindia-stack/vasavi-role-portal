@@ -1,12 +1,11 @@
 "use client";
 
-import { Bell, Building2, Radio, Search } from "lucide-react";
+import { Bell, Building2, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { useManagerStore, getStoreNotifications } from "@/stores/manager-store";
-import { MANAGER_HOTELS } from "@/lib/data/mock-data";
+import { useAuthStore } from "@/stores/auth-store";
 
 export function DashboardHeader({
   title,
@@ -15,16 +14,15 @@ export function DashboardHeader({
   title: string;
   subtitle?: string;
 }) {
-  const { hotelId, hotelLabel, locked, viewAll, setHotelId } = useHotelScope();
+  const { hotelId, hotelLabel, locked, viewAll, setHotelId, branches } = useHotelScope();
+  const accessToken = useAuthStore((s) => s.accessToken);
   const notifications = useManagerStore((s) => s.notifications);
+  const isRefreshing = useManagerStore((s) => s.isRefreshing);
+  const dataError = useManagerStore((s) => s.dataError);
+  const refreshFromApi = useManagerStore((s) => s.refreshFromApi);
   const scopedNotifications = getStoreNotifications(hotelId, notifications);
   const unread = scopedNotifications.filter((n) => !n.read).length;
-  const {
-    liveFeedEnabled,
-    toggleLiveFeed,
-    simulateIncomingBooking,
-    markAllNotificationsRead,
-  } = useManagerStore();
+  const { markAllNotificationsRead } = useManagerStore();
 
   return (
     <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-beige/40 px-6 py-4">
@@ -32,6 +30,9 @@ export function DashboardHeader({
         <div>
           <h1 className="font-display text-2xl text-charcoal">{title}</h1>
           {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
+          {dataError && (
+            <p className="mt-1 text-xs text-red-700">{dataError}</p>
+          )}
           {locked && (
             <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-champagne-dark">
               <Building2 className="h-3.5 w-3.5" />
@@ -53,9 +54,9 @@ export function DashboardHeader({
               className="h-9 rounded-lg border border-beige/60 bg-white px-3 text-xs font-bold text-charcoal"
             >
               <option value="all">All properties</option>
-              {MANAGER_HOTELS.map((h) => (
+              {branches.map((h) => (
                 <option key={h.id} value={h.id}>
-                  {h.city}
+                  {h.city} — {h.name}
                 </option>
               ))}
             </select>
@@ -66,17 +67,14 @@ export function DashboardHeader({
           )}
 
           <Button
-            variant={liveFeedEnabled ? "gold" : "outline"}
+            variant="outline"
             size="sm"
-            onClick={toggleLiveFeed}
             className="gap-1.5"
+            disabled={isRefreshing || !accessToken}
+            onClick={() => accessToken && void refreshFromApi(accessToken)}
           >
-            <Radio className={cn("h-3.5 w-3.5", liveFeedEnabled && "animate-pulse")} />
-            Live feed
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={simulateIncomingBooking}>
-            + Simulate booking
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
 
           <Button

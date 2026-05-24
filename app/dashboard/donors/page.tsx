@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { Eye, Lock } from "lucide-react";
+import { DonorAvatar } from "@/components/ui/donor-avatar";
 import Link from "next/link";
 import { Can } from "@/components/rbac/can";
 import { PermissionGuard } from "@/components/rbac/permission-guard";
@@ -66,13 +66,7 @@ export default function DonorsPage() {
 
               <div className="flex gap-4">
                 <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-beige">
-                  <Image
-                    src={d.avatarUrl}
-                    alt={d.name}
-                    fill
-                    className="object-cover"
-                    sizes="56px"
-                  />
+                  <DonorAvatar name={d.name} src={d.avatarUrl} sizes="56px" />
                 </div>
                 <div>
                   <h3 className="font-display text-lg">{d.name}</h3>

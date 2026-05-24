@@ -21,10 +21,9 @@ import {
   guestTypeLabel,
   type ManualBookingInput,
 } from "@/lib/booking/manual-booking";
-import { MANAGER_HOTELS } from "@/lib/data/mock-data";
+import { useManagerStore } from "@/stores/manager-store";
 import type { GuestType, PaymentStatus } from "@/lib/types";
 import { cn, formatCurrency, GUEST_TYPE_COLORS } from "@/lib/utils";
-import { useManagerStore } from "@/stores/manager-store";
 
 const GUEST_TYPES: GuestType[] = [
   "visitor",
@@ -50,12 +49,15 @@ export function ManualBookingDialog({
 }) {
   const bookings = useManagerStore((s) => s.bookings);
   const rooms = useManagerStore((s) => s.rooms);
+  const branches = useManagerStore((s) => s.branches);
   const createManualBooking = useManagerStore((s) => s.createManualBooking);
 
   const today = format(new Date(), "yyyy-MM-dd");
   const defaultOut = format(addDays(new Date(), 1), "yyyy-MM-dd");
 
-  const [propertyId, setPropertyId] = useState(hotelId === "all" ? "1" : hotelId);
+  const [propertyId, setPropertyId] = useState(
+    hotelId === "all" ? (branches[0]?.id ?? "") : hotelId
+  );
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -74,7 +76,7 @@ export function ManualBookingDialog({
 
   const effectiveHotelId = hotelId === "all" ? propertyId : hotelId;
   const effectiveHotelName =
-    MANAGER_HOTELS.find((h) => h.id === effectiveHotelId)?.name ?? hotelName;
+    branches.find((h) => h.id === effectiveHotelId)?.name ?? hotelName;
 
   const availableRooms = useMemo(() => {
     if (!checkIn || !checkOut || checkOut <= checkIn) return [];
@@ -108,7 +110,7 @@ export function ManualBookingDialog({
     return calculateManualBookingPricing(selectedRoom, nights, guestType);
   }, [selectedRoom, checkIn, checkOut, guestType]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError(null);
     if (!guestName.trim() || !guestPhone.trim()) {
       setError("Guest name and phone are required.");
@@ -141,7 +143,7 @@ export function ManualBookingDialog({
     };
 
     setSubmitting(true);
-    const result = createManualBooking(input);
+    const result = await createManualBooking(input);
     setSubmitting(false);
 
     if (!result.success) {
@@ -223,7 +225,7 @@ export function ManualBookingDialog({
                     }}
                     className="w-full h-9 rounded-lg border border-beige/60 px-3 text-sm"
                   >
-                    {MANAGER_HOTELS.map((h) => (
+                    {branches.map((h) => (
                       <option key={h.id} value={h.id}>
                         {h.name} · {h.city}
                       </option>

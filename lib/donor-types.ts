@@ -62,6 +62,8 @@ export interface DonorDocument {
 
 export interface PlatformDonor {
   id: string;
+  /** Auth user UUID — required for coupon assignment. */
+  userId?: string;
   donorId: string;
   profilePhoto: string;
   familyPhoto?: string;

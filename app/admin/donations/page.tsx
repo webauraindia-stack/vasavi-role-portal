@@ -1,17 +1,29 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Crown, FileText, Heart } from "lucide-react";
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import { Can } from "@/components/rbac/can";
 import { PlatformModuleHeader } from "@/components/admin/platform-module-header";
 import { useAdminStore } from "@/stores/admin-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { formatINR } from "@/lib/utils";
 
 export default function DonationsAdminPage() {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const loadDonors = useAdminStore((s) => s.loadDonors);
+  const loadDonationTotals = useAdminStore((s) => s.loadDonationTotals);
   const donors = useAdminStore((s) => s.donors);
-  const totalContributions = donors.reduce((s, d) => s + d.totalContribution, 0);
+  const totalDonationsPaise = useAdminStore((s) => s.totalDonationsPaise);
+  const totalContributions = Math.round(totalDonationsPaise / 100);
   const pending = donors.filter((d) => d.status === "pending_approval").length;
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void loadDonors(accessToken, { force: true });
+    void loadDonationTotals(accessToken);
+  }, [accessToken, loadDonors, loadDonationTotals]);
 
   return (
     <PermissionGuard
@@ -33,7 +45,7 @@ export default function DonationsAdminPage() {
             <p className="mt-1 text-2xl font-bold text-amber-800">{pending}</p>
           </div>
           <div className="card-manager p-4">
-            <p className="text-[10px] font-bold uppercase text-muted">Contributions (demo)</p>
+            <p className="text-[10px] font-bold uppercase text-muted">Contributions</p>
             <p className="mt-1 text-2xl font-bold text-champagne-dark">
               {formatINR(totalContributions)}
             </p>
@@ -41,6 +53,21 @@ export default function DonationsAdminPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
+          <Can permission="coupons.manage">
+            <Link
+              href="/admin/coupons"
+              className="card-manager flex items-start gap-4 p-5 transition-colors hover:border-champagne/40"
+            >
+              <FileText className="h-8 w-8 text-champagne shrink-0" />
+              <div className="flex-1">
+                <h2 className="font-bold text-charcoal">Coupon management</h2>
+                <p className="text-sm text-muted mt-1">
+                  Issue coupon batches against donations and dispatch to donors
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted shrink-0 mt-1" />
+            </Link>
+          </Can>
           <Can permission="donors.manage">
             <Link
               href="/admin/donors"

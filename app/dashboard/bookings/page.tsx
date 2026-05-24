@@ -10,11 +10,14 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { useExtensionStore } from "@/stores/extension-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 
 export default function BookingsPage() {
   const { hotelId, hotelName, viewAll } = useHotelScope();
-  const { bookings, updateBookingStatus } = useManagerStore();
+  const { bookings, updateBookingStatus, recordCashPayment, refreshFromApi } =
+    useManagerStore();
+  const accessToken = useAuthStore((s) => s.accessToken);
   const { requests, fetchRequests } = useExtensionStore();
 
   const loadExtensions = useCallback(() => {
@@ -24,6 +27,10 @@ export default function BookingsPage() {
   useEffect(() => {
     loadExtensions();
   }, [loadExtensions]);
+
+  useEffect(() => {
+    if (accessToken) void refreshFromApi(accessToken);
+  }, [accessToken, refreshFromApi]);
 
   const scopedBookings = useMemo(
     () => getStoreBookings(hotelId, bookings),
@@ -60,6 +67,12 @@ export default function BookingsPage() {
           bookings={scopedBookings}
           extensions={scopedExtensions}
           onStatusChange={updateBookingStatus}
+          onRecordCash={async (id) => {
+            const result = await recordCashPayment(id, "Recorded at front desk");
+            if (!result.ok && result.error) {
+              window.alert(result.error);
+            }
+          }}
         />
       </div>
     </>

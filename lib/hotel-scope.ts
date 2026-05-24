@@ -1,4 +1,4 @@
-import { MANAGER_HOTELS } from "@/lib/data/mock-data";
+import type { ManagerHotel } from "@/lib/types";
 import type { PortalUser } from "@/lib/rbac";
 
 export function canViewAllHotels(user: PortalUser | null | undefined): boolean {
@@ -17,12 +17,12 @@ export function resolveHotelId(
   return user?.hotelId ?? storedHotelId;
 }
 
-export function getHotelLabel(hotelId: string): string {
+export function getHotelLabel(hotelId: string, branches: ManagerHotel[]): string {
   if (hotelId === "all") return "All properties";
-  const hotel = MANAGER_HOTELS.find((h) => h.id === hotelId);
+  const hotel = branches.find((h) => h.id === hotelId);
   return hotel ? `${hotel.name} · ${hotel.city}` : "Your property";
 }
 
-export function getHotelName(hotelId: string): string {
-  return MANAGER_HOTELS.find((h) => h.id === hotelId)?.name ?? "Your property";
+export function getHotelName(hotelId: string, branches: ManagerHotel[]): string {
+  return branches.find((h) => h.id === hotelId)?.name ?? "Your property";
 }

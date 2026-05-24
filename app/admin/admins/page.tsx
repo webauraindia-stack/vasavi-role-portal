@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowRight, FileText, Heart, Shield, UserCog, Wallet } from "lucide-react";
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import { ADMIN_PRESETS, PERMISSION_LABELS } from "@/lib/rbac";
-import { DEMO_ACCOUNTS } from "@/lib/rbac/users";
 import { useAuthUser } from "@/stores/auth-store";
 
 const PLATFORM_MODULES = [
@@ -53,8 +52,9 @@ export default function AdminsPage() {
       <div className="p-6 max-w-5xl">
         <h1 className="font-display text-2xl text-champagne">Admin management</h1>
         <p className="mt-1 text-sm text-muted">
-          Super Admin controls all platform modules — Donations, CMS, Finance, and hotel
-          operations — from this portal.
+          Super Admin controls platform modules from this portal. Staff accounts are
+          provisioned in Django (phone OTP login) and branch assignments use the backend{" "}
+          <code className="text-xs">branches/&lt;id&gt;/assign-admin/</code> API.
         </p>
 
         <div className="mt-8">
@@ -84,46 +84,40 @@ export default function AdminsPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <div className="card-manager p-5">
-            <h2 className="font-semibold">Delegated admin accounts</h2>
-            <p className="text-xs text-muted mt-1">
-              Specialist logins for Donations, CMS, and Finance (managed by Super Admin)
-            </p>
-            <ul className="mt-3 space-y-2 text-sm">
-              {Object.entries(DEMO_ACCOUNTS)
-                .filter(([, a]) => a.user.role === "admin")
-                .map(([email, a]) => (
-                  <li key={email} className="rounded-lg bg-surface p-3">
-                    <p className="font-medium">{a.user.name}</p>
-                    <p className="text-xs text-muted">{email}</p>
-                    <p className="text-xs mt-1">{a.user.permissions.length} permissions</p>
-                  </li>
-                ))}
-            </ul>
+            <h2 className="font-semibold">Your session</h2>
+            <p className="text-xs text-muted mt-1">Signed in via staff OTP (Django backend)</p>
+            {user && (
+              <ul className="mt-3 space-y-2 text-sm">
+                <li className="rounded-lg bg-surface p-3">
+                  <p className="font-medium">{user.name}</p>
+                  <p className="text-xs text-muted">{user.email}</p>
+                  <p className="text-xs mt-1 capitalize">{user.role.replace("_", " ")}</p>
+                  {user.hotelName && (
+                    <p className="text-xs text-muted mt-1">Branch: {user.hotelName}</p>
+                  )}
+                </li>
+              </ul>
+            )}
           </div>
+
           <div className="card-manager p-5">
             <h2 className="font-semibold">Permission presets</h2>
-            <ul className="mt-3 space-y-2 text-sm">
+            <p className="text-xs text-muted mt-1">
+              Delegated admin roles map from backend permission strings
+            </p>
+            <ul className="mt-3 space-y-2 text-xs text-muted">
               {Object.entries(ADMIN_PRESETS).map(([key, perms]) => (
-                <li key={key} className="border-b border-beige/30 pb-2">
-                  <span className="font-medium capitalize">{key.replace("_", " ")}</span>
-                  <span className="text-muted"> — {perms.length} permissions</span>
+                <li key={key} className="rounded-lg border border-beige/40 p-2">
+                  <span className="font-bold text-charcoal capitalize">{key.replace("_", " ")}</span>
+                  <span className="ml-2">
+                    {perms.slice(0, 4).map((p) => PERMISSION_LABELS[p] ?? p).join(", ")}
+                    {perms.length > 4 ? "…" : ""}
+                  </span>
                 </li>
               ))}
             </ul>
           </div>
         </div>
-
-        {user?.role === "super_admin" && (
-          <div className="mt-6 card-manager p-5">
-            <h2 className="font-semibold">
-              All permissions ({Object.keys(PERMISSION_LABELS).length})
-            </h2>
-            <p className="text-xs text-muted mt-1">
-              {user.name} has unrestricted access to Donations, CMS, Finance, hotels, and
-              settings.
-            </p>
-          </div>
-        )}
       </div>
     </PermissionGuard>
   );

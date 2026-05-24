@@ -31,6 +31,8 @@ export type Permission =
   | "donors.manage"
   | "donors.receipts"
   | "donors.certificates"
+  | "coupons.view"
+  | "coupons.manage"
   | "events.view"
   | "events.manage"
   | "cms.homepage"
@@ -101,6 +103,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "donors.manage": "Manage donors (platform)",
   "donors.receipts": "Generate receipts",
   "donors.certificates": "Generate certificates",
+  "coupons.view": "View coupons",
+  "coupons.manage": "Create & dispatch coupons",
   "events.view": "View events",
   "events.manage": "Manage events",
   "cms.homepage": "Homepage CMS",
@@ -152,6 +156,8 @@ export const ADMIN_PRESETS: Record<string, Permission[]> = {
     "donors.manage",
     "donors.receipts",
     "donors.certificates",
+    "coupons.view",
+    "coupons.manage",
     "analytics.donations",
   ],
   cms: ["cms.homepage", "cms.news", "cms.gallery", "cms.pages", "events.view"],
@@ -179,6 +185,7 @@ export const PORTAL_NAV: NavItem[] = [
   { href: "/admin/donations", label: "Donations", icon: "Heart", permission: "donations.view" },
   { href: "/admin/donors", label: "Donor management", icon: "Shield", permission: "donors.manage" },
   { href: "/admin/donors/analytics", label: "Donor analytics", icon: "BarChart3", permission: "analytics.donations" },
+  { href: "/admin/coupons", label: "Coupons", icon: "Ticket", permission: "coupons.manage" },
   { href: "/admin/cms", label: "CMS", icon: "FileText", permission: "cms.homepage" },
   { href: "/admin/finance", label: "Finance", icon: "Wallet", permission: "finance.transactions" },
   { href: "/admin/extensions", label: "Extension analytics", icon: "CalendarClock", permission: "audit.view" },
@@ -193,6 +200,7 @@ export const ROUTE_PERMISSIONS: { prefix: string; permission: Permission }[] = [
   { prefix: "/admin/cms", permission: "cms.homepage" },
   { prefix: "/admin/finance", permission: "finance.transactions" },
   { prefix: "/admin/donors/analytics", permission: "analytics.donations" },
+  { prefix: "/admin/coupons", permission: "coupons.manage" },
   { prefix: "/admin/donors/new", permission: "donors.manage" },
   { prefix: "/admin/donors", permission: "donors.manage" },
   { prefix: "/admin/settings", permission: "settings.view" },

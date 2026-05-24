@@ -40,10 +40,12 @@ export function BookingList({
   bookings,
   extensions = [],
   onStatusChange,
+  onRecordCash,
 }: {
   bookings: ManagerBooking[];
   extensions?: StayExtensionRequest[];
   onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"]) => void;
+  onRecordCash?: (id: string) => void | Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<(typeof STATUS_TABS)[number]["value"]>("all");
@@ -232,6 +234,16 @@ export function BookingList({
                         <CalendarClock className="h-3.5 w-3.5" />
                         Extend
                       </Link>
+                    )}
+                    {booking.paymentStatus === "pending" && onRecordCash && (
+                      <Button
+                        variant="gold"
+                        size="sm"
+                        className="text-[10px] px-2"
+                        onClick={() => void onRecordCash(booking.id)}
+                      >
+                        Record cash
+                      </Button>
                     )}
                     {onStatusChange && (
                       <StatusMenu booking={booking} onStatusChange={onStatusChange} />

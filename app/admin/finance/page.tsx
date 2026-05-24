@@ -50,7 +50,7 @@ export default function FinanceAdminPage() {
       <div className="mx-auto max-w-5xl space-y-6 p-6">
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="card-manager p-4">
-            <p className="text-[10px] font-bold uppercase text-muted">Collected (demo)</p>
+            <p className="text-[10px] font-bold uppercase text-muted">Collected</p>
             <p className="mt-1 text-2xl font-bold text-emerald-800">
               {formatINR(totalRevenue)}
             </p>
@@ -128,7 +128,9 @@ function ModuleCard({
       <Icon className="h-7 w-7 text-champagne mb-3" />
       <h2 className="font-bold text-charcoal">{title}</h2>
       <p className="text-sm text-muted mt-1">{description}</p>
-      <p className="text-[10px] text-muted mt-3">Demo — API integration pending</p>
+      <p className="text-[10px] text-muted mt-3">
+        Figures from live bookings loaded for your role scope.
+      </p>
     </div>
   );
 }

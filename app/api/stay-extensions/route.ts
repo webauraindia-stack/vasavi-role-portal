@@ -12,7 +12,13 @@ import {
   getExtension,
 } from "@/lib/stay-extension/server-store";
 import type { StayExtensionRequest } from "@/lib/stay-extension/types";
-import { MOCK_BOOKINGS, MOCK_ROOMS } from "@/lib/data/mock-data";
+import { resolveAccessToken } from "@/lib/api/server-backend";
+import {
+  extendBookingStay,
+  getBookingByReference,
+  listBookings,
+} from "@/lib/api/bookings";
+import { listRoomInventory } from "@/lib/api/properties";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -21,6 +27,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const token = await resolveAccessToken(request);
+
   try {
     const body = await request.json();
     const {
@@ -28,7 +36,7 @@ export async function POST(request: Request) {
       requestedCheckOut,
       paymentMethod,
       selectedAlternativeRoomId,
-      actorEmail = "guest@vasavi.example",
+      actorEmail = "guest@vasavi.local",
     } = body as {
       bookingReference: string;
       requestedCheckOut: string;
@@ -37,14 +45,21 @@ export async function POST(request: Request) {
       actorEmail?: string;
     };
 
-    const booking = MOCK_BOOKINGS.find((b) => b.reference === bookingReference);
+    if (!token) {
+      return NextResponse.json({ error: "Authorization required" }, { status: 401 });
+    }
+
+    const booking = await getBookingByReference(token, bookingReference);
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
+    const allBookings = await listBookings(token);
+    const rooms = await listRoomInventory(token, allBookings);
+
     let roomNumber = booking.roomNumber;
     if (selectedAlternativeRoomId) {
-      const alt = MOCK_ROOMS.find((r) => r.id === selectedAlternativeRoomId);
+      const alt = rooms.find((r) => r.id === selectedAlternativeRoomId);
       if (alt) roomNumber = alt.number;
     }
 
@@ -52,8 +67,8 @@ export async function POST(request: Request) {
     const availability = checkRoomAvailabilityForExtension(
       ctx,
       requestedCheckOut,
-      MOCK_BOOKINGS,
-      MOCK_ROOMS
+      allBookings,
+      rooms
     );
 
     const pricing =
@@ -104,15 +119,20 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ data: getExtension(extension.id) ?? extension }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Invalid request" },
+      { status: 400 }
+    );
   }
 }
 
 export async function PATCH(request: Request) {
+  const token = await resolveAccessToken(request);
+
   try {
     const body = await request.json();
-    const { id, action, actor = "admin@vasavi.org", actorRole = "admin", ...rest } =
+    const { id, action, actor = "admin@vasavi.local", actorRole = "admin", ...rest } =
       body as {
         id: string;
         action:
@@ -149,23 +169,29 @@ export async function PATCH(request: Request) {
       appendAudit(id, "rejected", actor, actorRole);
     } else if (action === "waive") {
       const waived = rest.waivedAmount ?? updated.pricing?.totalDue ?? 0;
-      const booking = MOCK_BOOKINGS.find((b) => b.id === updated.bookingId);
-      if (booking && updated.pricing) {
-        updated.pricing = calculateExtensionPricing(
-          booking,
-          updated.requestedCheckOut,
-          waived
-        );
+      if (token) {
+        const booking = await getBookingByReference(token, updated.bookingReference);
+        if (booking && updated.pricing) {
+          updated.pricing = calculateExtensionPricing(
+            booking,
+            updated.requestedCheckOut,
+            waived
+          );
+        }
       }
       updated.adminNote = rest.adminNote;
       updated.status = "completed";
-      applyExtensionToBooking(updated);
+      if (token) {
+        await applyExtensionToBackend(token, updated);
+      }
       appendAudit(id, "waived_and_completed", actor, actorRole, { waived });
     } else if (action === "complete_payment") {
       const txn = rest.paymentTransactionId ?? `TXN-${Date.now()}`;
       updated.paymentTransactionId = txn;
       updated.status = "completed";
-      applyExtensionToBooking(updated);
+      if (token) {
+        await applyExtensionToBackend(token, updated);
+      }
       appendAudit(id, "payment_completed", actor, actorRole, { txn });
     } else if (action === "suggest_alternative") {
       updated.status = "alternative_offered";
@@ -187,34 +213,31 @@ export async function PATCH(request: Request) {
     }
     updated = saveExtension(updated);
 
-    const bookingUpdate = MOCK_BOOKINGS.find((b) => b.id === updated.bookingId);
+    let bookingPayload = null;
+    if (token) {
+      bookingPayload = await getBookingByReference(token, updated.bookingReference);
+    }
 
     return NextResponse.json({
       data: updated,
-      booking: bookingUpdate,
+      booking: bookingPayload,
     });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Invalid request" },
+      { status: 400 }
+    );
   }
 }
 
-function applyExtensionToBooking(ext: StayExtensionRequest) {
-  const idx = MOCK_BOOKINGS.findIndex((b) => b.id === ext.bookingId);
-  if (idx < 0) return;
-  const b = MOCK_BOOKINGS[idx];
-  const extra = ext.pricing?.totalDue ?? 0;
-  MOCK_BOOKINGS[idx] = {
-    ...b,
-    checkOut: ext.requestedCheckOut,
-    roomNumber: ext.roomNumber ?? b.roomNumber,
-    nights: Math.max(
-      1,
-      Math.ceil(
-        (new Date(ext.requestedCheckOut).getTime() - new Date(b.checkIn).getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
-    ),
-    total: b.total + extra,
-    paymentStatus: extra > 0 && b.paymentStatus === "paid" ? "partial" : b.paymentStatus,
-  };
+async function applyExtensionToBackend(
+  token: string,
+  ext: StayExtensionRequest
+) {
+  await extendBookingStay(
+    token,
+    ext.bookingId,
+    ext.requestedCheckOut,
+    ext.adminNote ?? "Stay extension applied from portal"
+  );
 }

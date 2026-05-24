@@ -8,7 +8,7 @@ import { getStoreTickets } from "@/stores/manager-store";
 
 export default function SupportPage() {
   const { hotelId } = useHotelScope();
-  const tickets = getStoreTickets(hotelId);
+  const tickets = getStoreTickets();
 
   return (
     <>
@@ -18,7 +18,9 @@ export default function SupportPage() {
       />
       <div className="p-6 space-y-3 max-w-2xl">
         {tickets.length === 0 ? (
-          <p className="text-sm text-muted">No support tickets for this property.</p>
+          <p className="text-sm text-muted">
+            No support tickets yet — connect a support API when available.
+          </p>
         ) : (
           tickets.map((t) => (
             <div key={t.id} className="card-manager p-4">

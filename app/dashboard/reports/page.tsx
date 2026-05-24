@@ -12,13 +12,17 @@ import {
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { formatCurrency } from "@/lib/utils";
-import { MOCK_REVENUE } from "@/stores/manager-store";
-import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
+import {
+  useManagerStore,
+  getStoreBookings,
+  revenueFromBookings,
+} from "@/stores/manager-store";
 
 export default function ReportsPage() {
   const { hotelId } = useHotelScope();
   const { bookings } = useManagerStore();
   const filtered = getStoreBookings(hotelId, bookings);
+  const chartData = revenueFromBookings(filtered);
   const couponRedemptions = filtered.reduce((s, b) => s + b.appliedCoupons.length, 0);
   const freeStays = filtered.filter((b) => b.paymentStatus === "free_stay").length;
 
@@ -49,7 +53,7 @@ export default function ReportsPage() {
           <h2 className="font-display text-base mb-4">Daily revenue trend</h2>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MOCK_REVENUE}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f5e6ca" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -74,7 +78,7 @@ export default function ReportsPage() {
         </div>
 
         <div className="card-manager p-4">
-          <h2 className="font-display text-base mb-3">Donation & KCGF impact (mock)</h2>
+          <h2 className="font-display text-base mb-3">Donation & KCGF impact</h2>
           <p className="text-sm text-muted leading-relaxed">
             This week, donor-tier discounts and coupons reduced guest payments by{" "}
             <strong className="text-champagne">
