@@ -12,6 +12,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { ManualBookingTrigger } from "@/components/dashboard/manual-booking-dialog";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { StatsGrid } from "@/components/dashboard/stats-grid";
 import { BookingTable } from "@/components/dashboard/booking-table";
@@ -27,7 +28,7 @@ import {
 export default function DashboardOverviewPage() {
   const searchParams = useSearchParams();
   const unauthorized = searchParams.get("error") === "unauthorized";
-  const { hotelId } = useHotelScope();
+  const { hotelId, hotelName, viewAll } = useHotelScope();
   const {
     bookings,
     rooms,
@@ -84,6 +85,13 @@ export default function DashboardOverviewPage() {
             You tried to open a module your role cannot access. Use the sidebar for your assigned areas.
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-2">
+          <ManualBookingTrigger
+            hotelId={hotelId}
+            hotelName={hotelName}
+            viewAll={viewAll}
+          />
+        </div>
         <StatsGrid bookings={filteredBookings} rooms={filteredRooms} />
 
         <div className="grid lg:grid-cols-3 gap-6">

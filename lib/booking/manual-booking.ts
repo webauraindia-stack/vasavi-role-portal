@@ -62,6 +62,21 @@ export function nightlyRateForRoom(room: RoomInventory): number {
   return NIGHTLY_BY_CATEGORY[room.category] ?? 2500;
 }
 
+export function calculateManualBookingPricingFromPaise(
+  basePricePerNightPaise: number,
+  nights: number,
+  guestType: GuestType
+): ManualBookingPricing {
+  const nightlyRate = Math.max(0, Math.round(basePricePerNightPaise / 100));
+  const subtotal = nightlyRate * nights;
+  const tierPct = TIER_DISCOUNT[guestType] ?? 0;
+  const tierDiscount = Math.round(subtotal * tierPct);
+  const taxable = Math.max(0, subtotal - tierDiscount);
+  const taxes = Math.round(taxable * TAX_RATE);
+  const total = taxable + taxes;
+  return { nights, nightlyRate, subtotal, tierDiscount, taxes, total };
+}
+
 export function calculateManualBookingPricing(
   room: RoomInventory,
   nights: number,
@@ -222,7 +237,9 @@ export function buildManualBooking(
     paymentStatus: isFreeStay ? "free_stay" : input.paymentStatus,
     bookingStatus: input.bookingStatus,
     specialRequests: input.specialRequests?.trim() || undefined,
-    source: input.source,
+    source: input.source === "walk_in" || input.source === "phone" ? "in_house" : input.source,
+    isInHouse: true,
+    roomId: room.id,
     appliedCoupons: [],
     isVip: input.guestType === "kcgf_donor" || input.guestType === "sponsorship_patron",
     createdAt: new Date().toISOString(),
@@ -235,7 +252,5 @@ export function shouldMarkRoomOccupied(
   bookingStatus: ManagerBooking["bookingStatus"],
   checkIn: string
 ): boolean {
-  if (bookingStatus === "checked_in") return true;
-  const today = new Date().toISOString().slice(0, 10);
-  return checkIn <= today && bookingStatus === "confirmed";
+  return bookingStatus === "checked_in";
 }

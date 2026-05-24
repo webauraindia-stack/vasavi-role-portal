@@ -43,3 +43,14 @@ export async function listManagerHotels(
     .filter((b) => b.is_active !== false)
     .map(mapBranchToManagerHotel);
 }
+
+export async function createBranch(
+  accessToken: string,
+  payload: { name: string; city: string; address: string; phone: string }
+): Promise<BackendBranch> {
+  return apiFetch<BackendBranch>("branches/", {
+    method: "POST",
+    accessToken,
+    body: JSON.stringify(payload),
+  });
+}

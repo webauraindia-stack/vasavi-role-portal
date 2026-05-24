@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   BedDouble,
+  Building2,
   CalendarCheck,
   CalendarClock,
   CreditCard,
@@ -16,7 +17,6 @@ import {
   Heart,
   LayoutDashboard,
   LogOut,
-  QrCode,
   Settings,
   Shield,
   Sparkles,
@@ -27,7 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { navForUser, type NavItem, type PortalUser } from "@/lib/rbac";
+import { extraNavForUser, navForUser, type NavItem, type PortalUser } from "@/lib/rbac";
 import { isHotelScopedAdmin } from "@/lib/hotel-scope";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { getStoreNotifications, useManagerStore } from "@/stores/manager-store";
@@ -36,7 +36,6 @@ const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   CalendarCheck,
   CalendarClock,
-  QrCode,
   Crown,
   Users,
   BedDouble,
@@ -51,6 +50,7 @@ const ICONS: Record<string, LucideIcon> = {
   FileText,
   Wallet,
   Ticket,
+  Building: Building2,
 };
 
 const PLATFORM_HREFS = new Set([
@@ -113,7 +113,17 @@ export function UnifiedSidebar({
   const notifications = useManagerStore((s) => s.notifications);
   const unread = getStoreNotifications(hotelId, notifications).filter((n) => !n.read)
     .length;
-  const navItems = useMemo(() => navForUser(user.permissions), [user.permissions]);
+  const navItems = useMemo(() => {
+    const base = navForUser(user.permissions);
+    const extras = extraNavForUser(user);
+    const merged = [...base];
+    for (const item of extras) {
+      if (!merged.some((m) => m.href === item.href)) {
+        merged.push(item);
+      }
+    }
+    return merged;
+  }, [user]);
 
   const hotelNav = navItems.filter((i) => !PLATFORM_HREFS.has(i.href));
   const platformNav = navItems.filter((i) => PLATFORM_HREFS.has(i.href));
@@ -122,7 +132,7 @@ export function UnifiedSidebar({
     <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-white min-h-screen border-r border-champagne/20">
       <div className="p-5 border-b border-white/10">
         <p className="font-display text-champagne-dark text-lg font-bold tracking-tight">
-          Vasavi Super Admin
+          {user.role === "super_admin" ? "Vasavi Super Admin" : "Vasavi Admin"}
         </p>
         <p className="text-[10px] text-white/50 uppercase tracking-widest mt-1">
           Management portal

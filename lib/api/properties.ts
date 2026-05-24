@@ -1,41 +1,27 @@
 import { fetchAllResults } from "@/lib/api/paginate";
 import type { ManagerBooking, RoomInventory, RoomStatus } from "@/lib/types";
+import type { StaffRoomDto } from "@/lib/api/staff-rooms";
 
-export type BackendRoom = {
-  id: string;
-  branch: { id: string; name: string; city: string };
-  room_number: string;
-  room_type: { id: string; name: string };
-  capacity: number;
-  base_price_per_night: number;
-  is_donor_exclusive: boolean;
-  is_active: boolean;
-};
+export type BackendRoom = StaffRoomDto;
 
-function roomOccupiedToday(
-  room: BackendRoom,
-  bookings: ManagerBooking[],
-  today: string
-): boolean {
-  return bookings.some((b) => {
+function resolveRoomStatus(room: StaffRoomDto, bookings: ManagerBooking[]): RoomStatus {
+  const occupied = bookings.some((b) => {
     if (b.hotelId !== room.branch.id) return false;
     if (b.roomNumber !== room.room_number) return false;
-    if (b.bookingStatus === "cancelled" || b.bookingStatus === "checked_out") {
-      return false;
-    }
-    return b.checkIn <= today && b.checkOut > today;
+    return b.bookingStatus === "checked_in";
   });
+  if (occupied) return "occupied";
+  if (!room.is_active) return "maintenance";
+  if (room.operational_status === "blocked") return "blocked";
+  if (room.operational_status === "maintenance") return "maintenance";
+  return "available";
 }
 
 export function mapRoomToInventory(
-  room: BackendRoom,
+  room: StaffRoomDto,
   bookings: ManagerBooking[]
 ): RoomInventory {
-  const today = new Date().toISOString().slice(0, 10);
-  const status: RoomStatus = roomOccupiedToday(room, bookings, today)
-    ? "occupied"
-    : "available";
-
+  const primary = room.images?.find((img) => img.is_primary) ?? room.images?.[0];
   return {
     id: room.id,
     hotelId: room.branch.id,
@@ -44,19 +30,24 @@ export function mapRoomToInventory(
     category: room.room_type.name,
     floor: 1,
     maxOccupancy: room.capacity,
-    status,
+    status: resolveRoomStatus(room, bookings),
     isDonorExclusive: room.is_donor_exclusive,
+    imageUrl: primary?.url ?? undefined,
+    basePricePerNight: Math.round(room.base_price_per_night / 100),
+    description: room.description,
+    isActive: room.is_active,
+    operationalStatus: room.operational_status,
   };
 }
 
 export async function listRooms(
   accessToken: string,
   branchId?: string
-): Promise<BackendRoom[]> {
+): Promise<StaffRoomDto[]> {
   const path = branchId
-    ? `properties/rooms/?branch_id=${branchId}`
-    : "properties/rooms/";
-  return fetchAllResults<BackendRoom>(path, accessToken);
+    ? `staff/rooms/?branch_id=${branchId}`
+    : "staff/rooms/";
+  return fetchAllResults<StaffRoomDto>(path, accessToken);
 }
 
 export async function listRoomInventory(
@@ -65,7 +56,5 @@ export async function listRoomInventory(
   branchId?: string
 ): Promise<RoomInventory[]> {
   const rooms = await listRooms(accessToken, branchId);
-  return rooms
-    .filter((r) => r.is_active !== false)
-    .map((r) => mapRoomToInventory(r, bookings));
+  return rooms.map((r) => mapRoomToInventory(r, bookings));
 }

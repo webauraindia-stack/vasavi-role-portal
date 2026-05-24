@@ -104,6 +104,31 @@ export default function CouponsAdminPage() {
             <Plus className="mr-2 h-4 w-4 inline" />
             {showForm ? "Cancel" : "New coupon batch"}
           </button>
+          <button 
+            onClick={async () => {
+              if (!accessToken) return;
+              try {
+                const res = await fetch("/api/backend/coupons/export/", {
+                  headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (!res.ok) throw new Error("Export failed");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "coupons_export.xlsx";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+              } catch (e) {
+                alert("Failed to export coupons");
+              }
+            }}
+            className="btn-outline flex items-center gap-2 text-sm"
+          >
+            Download Excel
+          </button>
           <Link href="/admin/donors" className="btn-outline text-sm">
             Donor management
           </Link>

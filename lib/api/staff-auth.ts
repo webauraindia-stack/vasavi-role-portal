@@ -6,7 +6,13 @@ export type StaffUser = {
   phone: string;
   name: string;
   role: "admin" | "super_admin";
-  branch?: { id: string; name: string; city: string } | null;
+  branch?: {
+    id: string;
+    name: string;
+    city: string;
+    address?: string;
+    phone?: string;
+  } | null;
   permissions: string[];
 };
 

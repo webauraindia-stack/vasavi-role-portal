@@ -1,25 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
-  CalendarClock,
   CalendarRange,
   ChevronDown,
   ChevronUp,
   Crown,
   Eye,
+  Home,
+  Receipt,
   Search,
+  User,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { StayExtensionRequest } from "@/lib/stay-extension/types";
 import type { ManagerBooking } from "@/lib/types";
 import {
   BOOKING_STATUS_COLORS,
-  EXTENSION_STATUS_COLORS,
   GUEST_TYPE_COLORS,
   PAYMENT_STATUS_COLORS,
   cn,
@@ -30,35 +28,54 @@ import {
 
 const STATUS_TABS = [
   { value: "all", label: "All" },
-  { value: "checked_in", label: "In-house" },
+  { value: "in_house", label: "In-house" },
   { value: "confirmed", label: "Confirmed" },
   { value: "pending", label: "Pending" },
+  { value: "checked_in", label: "Checked in" },
   { value: "checked_out", label: "Departed" },
 ] as const;
 
+type StatusTab = (typeof STATUS_TABS)[number]["value"];
+
+function sourceLabel(booking: ManagerBooking): string {
+  if (booking.isInHouse) return "In-house (desk)";
+  switch (booking.source) {
+    case "walk_in":
+      return "Walk-in";
+    case "phone":
+      return "Phone";
+    case "donor_portal":
+      return "Donor portal";
+    default:
+      return "Website";
+  }
+}
+
 export function BookingList({
   bookings,
-  extensions = [],
   onStatusChange,
   onRecordCash,
+  onRefund,
+  onExtendCheckout,
 }: {
   bookings: ManagerBooking[];
-  extensions?: StayExtensionRequest[];
   onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"]) => void;
   onRecordCash?: (id: string) => void | Promise<void>;
+  onRefund?: (id: string) => void | Promise<void>;
+  onExtendCheckout?: (
+    id: string,
+    newCheckOut: string
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [query, setQuery] = useState("");
-  const [statusTab, setStatusTab] = useState<(typeof STATUS_TABS)[number]["value"]>("all");
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const extensionByRef = useMemo(
-    () => new Map(extensions.map((e) => [e.bookingReference, e])),
-    [extensions]
-  );
 
   const filtered = useMemo(() => {
     let list = bookings;
-    if (statusTab !== "all") {
+    if (statusTab === "in_house") {
+      list = list.filter((b) => b.isInHouse);
+    } else if (statusTab !== "all") {
       list = list.filter((b) => b.bookingStatus === statusTab);
     }
     if (query.trim()) {
@@ -69,7 +86,7 @@ export function BookingList({
           b.reference.toLowerCase().includes(q) ||
           b.roomNumber?.toLowerCase().includes(q) ||
           b.memberId?.toLowerCase().includes(q) ||
-          b.guestEmail.toLowerCase().includes(q)
+          b.guestPhone.toLowerCase().includes(q)
       );
     }
     return list;
@@ -78,27 +95,20 @@ export function BookingList({
   const stats = useMemo(
     () => ({
       total: bookings.length,
-      inHouse: bookings.filter((b) => b.bookingStatus === "checked_in").length,
+      inHouse: bookings.filter((b) => b.isInHouse).length,
+      checkedIn: bookings.filter((b) => b.bookingStatus === "checked_in").length,
       pending: bookings.filter((b) => b.bookingStatus === "pending").length,
-      extensions: extensions.filter((e) =>
-        ["pending_approval", "pending_payment", "alternative_offered"].includes(e.status)
-      ).length,
     }),
-    [bookings, extensions]
+    [bookings]
   );
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total bookings" value={stats.total} />
-        <StatCard label="In-house guests" value={stats.inHouse} tone="text-blue-800" />
+        <StatCard label="In-house (desk)" value={stats.inHouse} tone="text-champagne-dark" />
+        <StatCard label="Guests checked in" value={stats.checkedIn} tone="text-blue-800" />
         <StatCard label="Awaiting confirmation" value={stats.pending} tone="text-amber-800" />
-        <StatCard
-          label="Open extensions"
-          value={stats.extensions}
-          tone="text-champagne-dark"
-          href="/dashboard/extensions"
-        />
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -107,7 +117,7 @@ export function BookingList({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search guest, reference, room, email…"
+            placeholder="Search guest, reference, room, phone…"
             className="pl-9 h-9"
           />
         </div>
@@ -137,11 +147,7 @@ export function BookingList({
       ) : (
         <div className="space-y-3">
           {filtered.map((booking) => {
-            const extension = extensionByRef.get(booking.reference);
             const expanded = expandedId === booking.id;
-            const canExtend =
-              booking.bookingStatus === "checked_in" ||
-              booking.bookingStatus === "confirmed";
 
             return (
               <article
@@ -163,14 +169,10 @@ export function BookingList({
                         {booking.isVip && (
                           <Crown className="h-3.5 w-3.5 text-champagne-dark shrink-0" />
                         )}
-                        {extension && (
-                          <Badge
-                            className={cn(
-                              "text-[9px]",
-                              EXTENSION_STATUS_COLORS[extension.status] ?? ""
-                            )}
-                          >
-                            Extension · {extension.status.replace(/_/g, " ")}
+                        {booking.isInHouse && (
+                          <Badge className="text-[9px] bg-champagne/15 text-champagne-dark border-champagne/30">
+                            <Home className="h-2.5 w-2.5 mr-0.5 inline" />
+                            In-house
                           </Badge>
                         )}
                       </div>
@@ -202,11 +204,18 @@ export function BookingList({
                       <p className="font-mono font-bold text-charcoal">
                         {formatCurrency(booking.total)}
                       </p>
-                      <Badge className={cn("mt-0.5 text-[9px]", PAYMENT_STATUS_COLORS[booking.paymentStatus])}>
+                      <Badge
+                        className={cn(
+                          "mt-0.5 text-[9px]",
+                          PAYMENT_STATUS_COLORS[booking.paymentStatus]
+                        )}
+                      >
                         {booking.paymentStatus.replace("_", " ")}
                       </Badge>
                     </div>
-                    <Badge className={cn("text-[9px]", BOOKING_STATUS_COLORS[booking.bookingStatus])}>
+                    <Badge
+                      className={cn("text-[9px]", BOOKING_STATUS_COLORS[booking.bookingStatus])}
+                    >
                       {booking.bookingStatus.replace("_", " ")}
                     </Badge>
                   </div>
@@ -226,15 +235,6 @@ export function BookingList({
                         <ChevronDown className="h-3.5 w-3.5" />
                       )}
                     </Button>
-                    {canExtend && (
-                      <Link
-                        href="/dashboard/extensions"
-                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-1")}
-                      >
-                        <CalendarClock className="h-3.5 w-3.5" />
-                        Extend
-                      </Link>
-                    )}
                     {booking.paymentStatus === "pending" && onRecordCash && (
                       <Button
                         variant="gold"
@@ -245,33 +245,30 @@ export function BookingList({
                         Record cash
                       </Button>
                     )}
+                    {booking.paymentStatus === "paid" &&
+                      booking.bookingStatus !== "cancelled" &&
+                      onRefund && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] px-2"
+                          onClick={() => void onRefund(booking.id)}
+                        >
+                          Refund
+                        </Button>
+                      )}
                     {onStatusChange && (
                       <StatusMenu booking={booking} onStatusChange={onStatusChange} />
                     )}
                   </div>
                 </div>
 
-                {(booking.appliedCoupons.length > 0 || booking.tierDiscount > 0) && !expanded && (
-                  <div className="border-t border-beige/30 bg-emerald-50/40 px-4 py-2 flex flex-wrap gap-x-4 gap-y-1">
-                    {booking.tierDiscount > 0 && (
-                      <span className="text-[10px] font-semibold text-amber-800">
-                        Tier −{formatCurrency(booking.tierDiscount)}
-                      </span>
-                    )}
-                    {booking.appliedCoupons.map((c) => (
-                      <span
-                        key={c.code}
-                        className="text-[10px] font-semibold text-emerald-800"
-                      >
-                        −{formatCurrency(c.amountDeducted)} · {c.code}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 {expanded && (
                   <div className="border-t border-beige/40 bg-surface/40 p-4">
-                    <BookingExpandedDetail booking={booking} extension={extension} />
+                    <BookingExpandedDetail
+                      booking={booking}
+                      onExtendCheckout={onExtendCheckout}
+                    />
                   </div>
                 )}
               </article>
@@ -287,27 +284,17 @@ function StatCard({
   label,
   value,
   tone = "text-charcoal",
-  href,
 }: {
   label: string;
   value: number;
   tone?: string;
-  href?: string;
 }) {
-  const inner = (
+  return (
     <div className="card-manager p-4">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</p>
       <p className={cn("mt-1 text-2xl font-bold", tone)}>{value}</p>
     </div>
   );
-  if (href) {
-    return (
-      <Link href={href} className="block hover:opacity-90 transition-opacity">
-        {inner}
-      </Link>
-    );
-  }
-  return inner;
 }
 
 function StatusMenu({
@@ -319,7 +306,10 @@ function StatusMenu({
 }) {
   const nextActions: { label: string; status: ManagerBooking["bookingStatus"] }[] = [];
 
-  if (booking.bookingStatus === "pending") {
+  if (
+    booking.bookingStatus === "pending" &&
+    (booking.paymentStatus === "paid" || booking.paymentStatus === "free_stay")
+  ) {
     nextActions.push({ label: "Confirm", status: "confirmed" });
   }
   if (booking.bookingStatus === "confirmed") {
@@ -328,13 +318,14 @@ function StatusMenu({
   if (booking.bookingStatus === "checked_in") {
     nextActions.push({ label: "Check out", status: "checked_out" });
   }
-  if (booking.bookingStatus !== "cancelled") {
+  if (
+    booking.bookingStatus !== "cancelled" &&
+    booking.bookingStatus !== "checked_out"
+  ) {
     nextActions.push({ label: "Cancel", status: "cancelled" });
   }
 
-  if (nextActions.length === 0) {
-    return null;
-  }
+  if (nextActions.length === 0) return null;
 
   return (
     <div className="flex flex-wrap gap-1">
@@ -355,35 +346,121 @@ function StatusMenu({
 
 function BookingExpandedDetail({
   booking,
-  extension,
+  onExtendCheckout,
 }: {
   booking: ManagerBooking;
-  extension?: StayExtensionRequest;
+  onExtendCheckout?: (
+    id: string,
+    newCheckOut: string
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
+  const [newCheckOut, setNewCheckOut] = useState(booking.checkOut);
+  const [extendBusy, setExtendBusy] = useState(false);
+  const [extendError, setExtendError] = useState<string | null>(null);
+
+  const canExtendCheckout =
+    onExtendCheckout &&
+    (booking.bookingStatus === "checked_in" || booking.bookingStatus === "confirmed");
+
+  const lineItems = [
+    { label: "Room charges", amount: booking.subtotal },
+    ...(booking.tierDiscount > 0
+      ? [{ label: "Tier discount", amount: -booking.tierDiscount }]
+      : []),
+    ...(booking.couponDiscount > 0
+      ? [{ label: "Coupon / promo", amount: -booking.couponDiscount }]
+      : []),
+    ...(booking.walletApplied > 0
+      ? [{ label: "Wallet applied", amount: -booking.walletApplied }]
+      : []),
+    ...(booking.taxes > 0 ? [{ label: "Taxes & fees", amount: booking.taxes }] : []),
+  ];
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs sm:grid-cols-3">
-        <Detail label="Email" value={booking.guestEmail} />
-        <Detail label="Phone" value={booking.guestPhone} />
-        <Detail label="Source" value={booking.source.replace("_", " ")} />
-        <Detail label="Booked on" value={formatDateTime(booking.createdAt)} />
-        <Detail label="Subtotal" value={formatCurrency(booking.subtotal)} />
-        <Detail label="Taxes" value={formatCurrency(booking.taxes)} />
-        <Detail
-          label="Special requests"
-          value={booking.specialRequests ?? "None"}
-          className="col-span-2 sm:col-span-3"
-        />
-      </dl>
-      <div className="flex flex-col items-center gap-2">
-        <div className="rounded-xl border border-beige bg-white p-3">
-          <QRCodeSVG value={booking.qrCode} size={88} />
-        </div>
-        <p className="text-[10px] font-mono text-muted">{booking.qrCode}</p>
+    <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-beige/60 bg-white p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <User className="h-4 w-4 text-champagne" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+              Guest details
+            </h3>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+            <Detail label="Name" value={booking.guestName} />
+            <Detail label="Phone" value={booking.guestPhone || "—"} />
+            <Detail label="Email" value={booking.guestEmail} />
+            <Detail label="Guests" value={String(booking.guestCount ?? 1)} />
+            <Detail label="Source" value={sourceLabel(booking)} />
+            <Detail label="Booked on" value={formatDateTime(booking.createdAt)} />
+            <Detail label="Room" value={booking.roomNumber ?? "Unassigned"} />
+            <Detail label="Room type" value={booking.roomType} />
+            <Detail
+              label="Stay"
+              value={`${formatDate(booking.checkIn)} → ${formatDate(booking.checkOut)} (${booking.nights}n)`}
+              className="col-span-2"
+            />
+            {booking.specialRequests && (
+              <Detail
+                label="Requests"
+                value={booking.specialRequests}
+                className="col-span-2"
+              />
+            )}
+            {booking.notes && !booking.notes.startsWith("[In-house") && (
+              <Detail label="Notes" value={booking.notes} className="col-span-2" />
+            )}
+          </dl>
+        </section>
+
+        <section className="rounded-xl border border-beige/60 bg-white p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Receipt className="h-4 w-4 text-champagne" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted">
+              Invoice & payment
+            </h3>
+          </div>
+          <div className="space-y-2 text-xs">
+            {lineItems.map((row) => (
+              <div key={row.label} className="flex justify-between gap-4">
+                <span className="text-muted">{row.label}</span>
+                <span
+                  className={cn(
+                    "font-mono font-semibold tabular-nums",
+                    row.amount < 0 ? "text-emerald-700" : "text-charcoal"
+                  )}
+                >
+                  {row.amount < 0 ? "−" : ""}
+                  {formatCurrency(Math.abs(row.amount))}
+                </span>
+              </div>
+            ))}
+            <div className="border-t border-beige/50 pt-2 mt-2 flex justify-between gap-4">
+              <span className="font-bold text-charcoal">Total amount</span>
+              <span className="font-mono text-base font-bold text-charcoal tabular-nums">
+                {booking.finalAmountDisplay ?? formatCurrency(booking.total)}
+              </span>
+            </div>
+          </div>
+
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-xs border-t border-beige/40 pt-3">
+            <Detail label="Payment status" value={booking.paymentStatus.replace("_", " ")} />
+            <Detail label="Booking status" value={booking.bookingStatus.replace("_", " ")} />
+            {booking.paymentGateway && (
+              <Detail label="Gateway" value={booking.paymentGateway} />
+            )}
+            {booking.paymentReference && (
+              <Detail label="Reference" value={booking.paymentReference} mono />
+            )}
+            {booking.paymentPaidAt && (
+              <Detail label="Paid at" value={formatDateTime(booking.paymentPaidAt)} />
+            )}
+          </dl>
+        </section>
       </div>
 
       {booking.appliedCoupons.length > 0 && (
-        <div className="lg:col-span-2 rounded-lg border border-emerald-200/60 bg-emerald-50 p-3">
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50 p-3">
           <p className="text-[10px] font-bold uppercase text-emerald-800 mb-2">
             Benefits applied
           </p>
@@ -398,22 +475,50 @@ function BookingExpandedDetail({
         </div>
       )}
 
-      {extension && (
-        <div className="lg:col-span-2 rounded-lg border border-champagne/30 bg-champagne/5 p-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-champagne-dark">Stay extension in progress</p>
-            <p className="text-xs text-muted mt-0.5">
-              Requested checkout: {formatDate(extension.requestedCheckOut)}
-              {extension.pricing && ` · ${formatCurrency(extension.pricing.totalDue)} due`}
-            </p>
+      {canExtendCheckout && (
+        <section className="rounded-xl border border-champagne/30 bg-champagne/5 p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-champagne-dark mb-2">
+            Extend checkout date
+          </h3>
+          <p className="text-xs text-muted mb-3">
+            Update the guest&apos;s checkout when they stay longer. Current checkout:{" "}
+            {formatDate(booking.checkOut)}.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="text-[10px] font-bold uppercase text-muted block mb-1">
+                New checkout
+              </label>
+              <Input
+                type="date"
+                value={newCheckOut}
+                min={booking.checkOut}
+                onChange={(e) => setNewCheckOut(e.target.value)}
+                className="h-9 w-44"
+              />
+            </div>
+            <Button
+              variant="gold"
+              size="sm"
+              disabled={extendBusy || newCheckOut <= booking.checkOut}
+              onClick={async () => {
+                if (!onExtendCheckout) return;
+                setExtendBusy(true);
+                setExtendError(null);
+                const result = await onExtendCheckout(booking.id, newCheckOut);
+                setExtendBusy(false);
+                if (!result.ok) {
+                  setExtendError(result.error ?? "Could not extend stay.");
+                }
+              }}
+            >
+              {extendBusy ? "Saving…" : "Save new checkout"}
+            </Button>
           </div>
-          <Link
-            href="/dashboard/extensions"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-          >
-            Manage extension
-          </Link>
-        </div>
+          {extendError && (
+            <p className="mt-2 text-xs text-red-700">{extendError}</p>
+          )}
+        </section>
       )}
     </div>
   );
@@ -423,15 +528,24 @@ function Detail({
   label,
   value,
   className,
+  mono,
 }: {
   label: string;
   value: string;
   className?: string;
+  mono?: boolean;
 }) {
   return (
     <div className={className}>
       <dt className="text-[10px] font-bold uppercase text-muted">{label}</dt>
-      <dd className="mt-0.5 font-medium text-charcoal capitalize">{value}</dd>
+      <dd
+        className={cn(
+          "mt-0.5 font-medium text-charcoal",
+          mono && "font-mono text-[11px]"
+        )}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
@@ -473,9 +587,7 @@ export function BookingTable({
     );
   }
 
-  return (
-    <BookingList bookings={bookings} onStatusChange={onStatusChange} />
-  );
+  return <BookingList bookings={bookings} onStatusChange={onStatusChange} />;
 }
 
 export function BookingDetailCard({ booking }: { booking: ManagerBooking }) {

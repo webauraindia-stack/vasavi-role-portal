@@ -71,9 +71,19 @@ export interface ManagerBooking {
   bookingStatus: BookingStatus;
   qrCode: string;
   specialRequests?: string;
-  source: "website" | "walk_in" | "phone" | "donor_portal";
+  source: "website" | "walk_in" | "phone" | "donor_portal" | "in_house";
   appliedCoupons: AppliedCouponLog[];
   isVip: boolean;
+  isInHouse: boolean;
+  roomId?: string;
+  guestCount?: number;
+  notes?: string;
+  paymentReference?: string;
+  paymentGateway?: string;
+  paymentPaidAt?: string;
+  baseAmountDisplay?: string;
+  discountDisplay?: string;
+  finalAmountDisplay?: string;
   createdAt: string;
 }
 
@@ -136,6 +146,11 @@ export interface RoomInventory {
   floor: number;
   maxOccupancy: number;
   isDonorExclusive: boolean;
+  imageUrl?: string;
+  basePricePerNight?: number;
+  description?: string;
+  isActive?: boolean;
+  operationalStatus?: "available" | "blocked" | "maintenance";
   blockedReason?: string;
   blockedUntil?: string;
   maintenanceUntil?: string;

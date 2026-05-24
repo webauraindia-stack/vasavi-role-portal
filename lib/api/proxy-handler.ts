@@ -25,7 +25,8 @@ function forwardRequestHeaders(
       lower === "cookie" ||
       lower === "authorization" ||
       lower === "content-type" ||
-      lower === "x-idempotency-key"
+      lower === "x-idempotency-key" ||
+      lower.startsWith("content-")
     ) {
       headers.set(key, value);
       if (lower === "x-idempotency-key") {
@@ -60,7 +61,7 @@ export async function proxyToBackend(
     cache: "no-store",
   };
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.text();
+    init.body = await request.arrayBuffer();
   }
 
   const backendRes = await fetch(target, init);

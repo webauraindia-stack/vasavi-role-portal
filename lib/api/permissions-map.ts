@@ -1,9 +1,14 @@
 import type { Permission, PortalUser, UserRole } from "@/lib/rbac";
+import { ADMIN_PRESETS } from "@/lib/rbac";
 import type { StaffUser } from "@/lib/api/staff-auth";
 
 /** Map backend permission strings to portal RBAC permissions. */
 const BACKEND_MAP: Record<string, Permission[]> = {
-  "bookings.view": ["bookings.view", "payments.view", "analytics.bookings"],
+  "rooms.view": ["rooms.view"],
+  "rooms.create": ["rooms.create", "rooms.edit"],
+  "rooms.update": ["rooms.edit"],
+  "bookings.view": ["bookings.view", "payments.view", "analytics.bookings", "rooms.view"],
+  "bookings.create": ["bookings.create"],
   "bookings.update_status": [
     "bookings.update",
     "bookings.checkin",
@@ -40,6 +45,12 @@ function mapPermissions(backend: string[], role: UserRole): Permission[] {
   const out = new Set<Permission>();
   for (const key of backend) {
     for (const p of BACKEND_MAP[key] ?? []) {
+      out.add(p);
+    }
+  }
+  // Branch admins always receive hotel-operations capabilities (rooms, manual booking).
+  if (role === "admin") {
+    for (const p of ADMIN_PRESETS.hotel_ops) {
       out.add(p);
     }
   }

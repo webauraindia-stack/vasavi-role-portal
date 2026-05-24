@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, addDays } from "date-fns";
 import {
   AlertCircle,
@@ -16,13 +16,19 @@ import { Input } from "@/components/ui/input";
 import { Can } from "@/components/rbac/can";
 import {
   calculateManualBookingPricing,
+  calculateManualBookingPricingFromPaise,
   checkRoomAvailableForDates,
   findAvailableRoomsForStay,
   guestTypeLabel,
   type ManualBookingInput,
 } from "@/lib/booking/manual-booking";
+import {
+  searchStaffRooms,
+  type StaffRoomSearchResult,
+} from "@/lib/api/staff-operations";
 import { useManagerStore } from "@/stores/manager-store";
-import type { GuestType, PaymentStatus } from "@/lib/types";
+import { useAuthStore } from "@/stores/auth-store";
+import type { GuestType, PaymentStatus, RoomInventory } from "@/lib/types";
 import { cn, formatCurrency, GUEST_TYPE_COLORS } from "@/lib/utils";
 
 const GUEST_TYPES: GuestType[] = [
@@ -51,6 +57,7 @@ export function ManualBookingDialog({
   const rooms = useManagerStore((s) => s.rooms);
   const branches = useManagerStore((s) => s.branches);
   const createManualBooking = useManagerStore((s) => s.createManualBooking);
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   const today = format(new Date(), "yyyy-MM-dd");
   const defaultOut = format(addDays(new Date(), 1), "yyyy-MM-dd");
@@ -73,13 +80,81 @@ export function ManualBookingDialog({
   const [error, setError] = useState<string | null>(null);
   const [successRef, setSuccessRef] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [apiSearchResults, setApiSearchResults] = useState<StaffRoomSearchResult[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
 
   const effectiveHotelId = hotelId === "all" ? propertyId : hotelId;
   const effectiveHotelName =
     branches.find((h) => h.id === effectiveHotelId)?.name ?? hotelName;
 
+  const mapSearchToInventory = useCallback(
+    (row: StaffRoomSearchResult): RoomInventory => ({
+      id: row.id,
+      hotelId: row.branch.id,
+      number: row.room_number,
+      name: `${row.room_type.name} · ${row.room_number}`,
+      category: row.room_type.name,
+      floor: 1,
+      maxOccupancy: row.capacity,
+      status: "available",
+      isDonorExclusive: row.is_donor_exclusive,
+    }),
+    []
+  );
+
+  useEffect(() => {
+    if (!accessToken || !checkIn || !checkOut || checkOut <= checkIn || !effectiveHotelId) {
+      setApiSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingRooms(true);
+    void searchStaffRooms(accessToken, {
+      check_in: checkIn,
+      check_out: checkOut,
+      guests: 2,
+      branch_id: effectiveHotelId,
+    })
+      .then((rows) => {
+        if (!cancelled) setApiSearchResults(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setApiSearchResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRooms(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, checkIn, checkOut, effectiveHotelId]);
+
   const availableRooms = useMemo(() => {
     if (!checkIn || !checkOut || checkOut <= checkIn) return [];
+
+    if (accessToken && apiSearchResults.length > 0) {
+      const nights = Math.max(
+        1,
+        Math.ceil(
+          (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
+            (1000 * 60 * 60 * 24)
+        )
+      );
+      return apiSearchResults
+        .filter((row) => row.is_available)
+        .map((row) => {
+          const room = mapSearchToInventory(row);
+          return {
+            room,
+            pricing: calculateManualBookingPricingFromPaise(
+              row.base_price_per_night,
+              nights,
+              guestType
+            ),
+          };
+        });
+    }
+
     return findAvailableRoomsForStay(
       effectiveHotelId,
       checkIn,
@@ -87,7 +162,17 @@ export function ManualBookingDialog({
       rooms,
       bookings
     );
-  }, [bookings, checkIn, checkOut, effectiveHotelId, rooms]);
+  }, [
+    accessToken,
+    apiSearchResults,
+    bookings,
+    checkIn,
+    checkOut,
+    effectiveHotelId,
+    guestType,
+    mapSearchToInventory,
+    rooms,
+  ]);
 
   const effectiveRoomId = useMemo(() => {
     if (!roomId) return "";
@@ -176,7 +261,7 @@ export function ManualBookingDialog({
   if (!open) return null;
 
   return (
-    <Can permission="bookings.create">
+    <Can permission={["bookings.create", "rooms.view"]}>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <button
           type="button"
@@ -303,7 +388,7 @@ export function ManualBookingDialog({
                   </p>
                   {checkIn && checkOut && checkOut > checkIn && (
                     <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
-                      Live availability check
+                      {loadingRooms ? "Checking availability…" : "Live availability"}
                     </Badge>
                   )}
                 </div>
@@ -485,7 +570,7 @@ export function ManualBookingTrigger({
   const [formKey, setFormKey] = useState(0);
 
   return (
-    <Can permission="bookings.create">
+    <Can permission={["bookings.create", "rooms.view"]}>
       <Button
         size="sm"
         className="gap-1.5"
@@ -495,7 +580,7 @@ export function ManualBookingTrigger({
         }}
       >
         <UserPlus className="h-3.5 w-3.5" />
-        New walk-in booking
+        New manual booking
       </Button>
       <ManualBookingDialog
         key={formKey}

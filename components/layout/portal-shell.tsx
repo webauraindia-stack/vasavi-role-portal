@@ -50,7 +50,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (isAuthenticated && user && !canAccessPath(pathname, user.permissions)) {
+    if (
+      isAuthenticated &&
+      user &&
+      !canAccessPath(pathname, user.permissions, { hotelId: user.hotelId })
+    ) {
       router.replace(`${defaultLandingPath(user.permissions)}?error=unauthorized`);
     }
   }, [ready, isAuthenticated, pathname, router, user]);
@@ -75,7 +79,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!canAccessPath(pathname, user.permissions)) {
+  if (!canAccessPath(pathname, user.permissions, { hotelId: user.hotelId })) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted">
         Redirecting…

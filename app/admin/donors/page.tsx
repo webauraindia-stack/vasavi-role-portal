@@ -56,10 +56,37 @@ export default function DonorsListPage() {
           </p>
         </div>
         <Can permission="donors.manage">
-          <Link href="/admin/donors/new" className="btn-admin flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Add donor
-          </Link>
+          <div className="flex gap-2">
+            <button 
+              onClick={async () => {
+                if (!accessToken) return;
+                try {
+                  const res = await fetch("/api/backend/donors/export/", {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                  });
+                  if (!res.ok) throw new Error("Export failed");
+                  const blob = await res.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "donors_export.xlsx";
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  window.URL.revokeObjectURL(url);
+                } catch (e) {
+                  alert("Failed to export donors");
+                }
+              }}
+              className="btn-outline flex items-center gap-2"
+            >
+              Download Excel
+            </button>
+            <Link href="/admin/donors/new" className="btn-admin flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Add donor
+            </Link>
+          </div>
         </Can>
       </div>
 

@@ -112,8 +112,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       canAccess: (pathname) => {
-        const perms = get().user?.permissions ?? [];
-        return canAccessPath(pathname, perms);
+        const user = get().user;
+        const perms = user?.permissions ?? [];
+        return canAccessPath(pathname, perms, { hotelId: user?.hotelId });
       },
     }),
     {

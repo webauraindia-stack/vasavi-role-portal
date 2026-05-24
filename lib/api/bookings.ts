@@ -12,16 +12,41 @@ export type BackendBooking = {
   check_in_date: string;
   check_out_date: string;
   nights: number;
+  guest_count?: number;
   base_amount_paise: number;
   discount_amount_paise: number;
   final_amount_paise: number;
+  base_amount_display?: string;
+  discount_display?: string;
+  final_amount_display?: string;
   guest_name?: string;
   guest_phone?: string;
+  payment_reference?: string | null;
+  payment_gateway?: string | null;
+  payment_paid_at?: string | null;
   user?: BackendUser;
   branch?: { id: string; name: string; city: string };
-  room?: { room_number: string; room_type?: { name: string } };
+  room?: { id: string; room_number: string; room_type?: { name: string } };
+  notes?: string;
   created_at: string;
 };
+
+function isInHouseFromNotes(notes?: string): boolean {
+  if (!notes) return false;
+  return (
+    notes.includes("[In-house") ||
+    notes.includes("[Walk-in]") ||
+    notes.includes("[Phone booking]")
+  );
+}
+
+function notesSourceFromBackend(notes?: string): ManagerBooking["source"] {
+  if (!notes) return "website";
+  if (notes.includes("[In-house")) return "in_house";
+  if (notes.includes("[Walk-in]")) return "walk_in";
+  if (notes.includes("[Phone booking]")) return "phone";
+  return "website";
+}
 
 function mapBookingStatus(status: string): BookingStatus {
   switch (status) {
@@ -43,6 +68,7 @@ function mapPaymentStatus(status: string): PaymentStatus {
     case "paid":
       return "paid";
     case "refunded":
+    case "partially_refunded":
       return "refunded";
     case "partial":
       return "partial";
@@ -55,6 +81,7 @@ export function mapManagerBooking(b: BackendBooking): ManagerBooking {
   const subtotal = Math.round((b.base_amount_paise ?? 0) / 100);
   const discount = Math.round((b.discount_amount_paise ?? 0) / 100);
   const total = Math.round((b.final_amount_paise ?? 0) / 100);
+  const source = notesSourceFromBackend(b.notes);
   return {
     id: b.id,
     reference: b.booking_reference,
@@ -67,9 +94,11 @@ export function mapManagerBooking(b: BackendBooking): ManagerBooking {
     guestTypeLabel: b.user?.role === "donor" ? "Donor" : "Guest",
     roomType: b.room?.room_type?.name ?? "Room",
     roomNumber: b.room?.room_number,
+    roomId: b.room?.id,
     checkIn: b.check_in_date,
     checkOut: b.check_out_date,
     nights: b.nights,
+    guestCount: b.guest_count ?? 1,
     subtotal,
     tierDiscount: 0,
     couponDiscount: discount,
@@ -79,7 +108,15 @@ export function mapManagerBooking(b: BackendBooking): ManagerBooking {
     paymentStatus: mapPaymentStatus(b.payment_status),
     bookingStatus: mapBookingStatus(b.status),
     qrCode: b.booking_reference,
-    source: "website",
+    source,
+    isInHouse: isInHouseFromNotes(b.notes) || source === "in_house",
+    notes: b.notes,
+    paymentReference: b.payment_reference ?? undefined,
+    paymentGateway: b.payment_gateway ?? undefined,
+    paymentPaidAt: b.payment_paid_at ?? undefined,
+    baseAmountDisplay: b.base_amount_display,
+    discountDisplay: b.discount_display,
+    finalAmountDisplay: b.final_amount_display,
     appliedCoupons: [],
     isVip: b.user?.role === "donor",
     createdAt: b.created_at,
@@ -91,35 +128,36 @@ export async function listBookings(accessToken: string): Promise<ManagerBooking[
   return rows.map(mapManagerBooking);
 }
 
+export async function getBooking(accessToken: string, id: string): Promise<ManagerBooking> {
+  const b = await apiFetch<BackendBooking>(`bookings/${id}/`, {
+    method: "GET",
+    accessToken,
+  });
+  return mapManagerBooking(b);
+}
+
+/** Lookup by booking reference (used by stay-extension API routes). */
 export async function getBookingByReference(
   accessToken: string,
   reference: string
 ): Promise<ManagerBooking | null> {
-  const bookings = await listBookings(accessToken);
-  return bookings.find((b) => b.reference === reference) ?? null;
-}
+  const normalized = reference.trim();
+  if (!normalized) return null;
 
-export type CreateBookingPayload = {
-  room_id: string;
-  check_in_date: string;
-  check_out_date: string;
-  guest_count: number;
-  guest_name?: string;
-  guest_phone?: string;
-  notes?: string;
-};
+  try {
+    const rows = await fetchAllResults<BackendBooking>(
+      `bookings/?booking_reference=${encodeURIComponent(normalized)}`,
+      accessToken
+    );
+    const match =
+      rows.find((b) => b.booking_reference === normalized) ?? rows[0];
+    if (match) return mapManagerBooking(match);
+  } catch {
+    /* fall through to full list scan */
+  }
 
-export async function createBooking(
-  accessToken: string,
-  payload: CreateBookingPayload
-): Promise<ManagerBooking> {
-  const created = await apiFetch<BackendBooking>("bookings/", {
-    method: "POST",
-    accessToken,
-    body: JSON.stringify(payload),
-    idempotencyKey: crypto.randomUUID(),
-  });
-  return mapManagerBooking(created);
+  const all = await listBookings(accessToken);
+  return all.find((b) => b.reference === normalized) ?? null;
 }
 
 export async function extendBookingStay(
@@ -133,7 +171,7 @@ export async function extendBookingStay(
     accessToken,
     body: JSON.stringify({
       check_out_date: checkOutDate,
-      notes: notes ?? "",
+      notes: notes ?? "Checkout extended at front desk",
     }),
     idempotencyKey: crypto.randomUUID(),
   });
@@ -145,8 +183,8 @@ export async function updateBookingStatusApi(
   bookingId: string,
   status: string,
   reason?: string
-) {
-  return apiFetch(`bookings/${bookingId}/status/`, {
+): Promise<BackendBooking> {
+  return apiFetch<BackendBooking>(`bookings/${bookingId}/status/`, {
     method: "PATCH",
     accessToken,
     body: JSON.stringify({ status, reason: reason ?? "" }),
@@ -163,6 +201,19 @@ export async function recordCashPaymentApi(
     method: "POST",
     accessToken,
     body: JSON.stringify(notes ? { notes } : {}),
+    idempotencyKey: crypto.randomUUID(),
+  });
+}
+
+export async function refundBookingPaymentApi(
+  accessToken: string,
+  bookingId: string,
+  reason?: string
+): Promise<BackendBooking> {
+  return apiFetch<BackendBooking>(`staff/bookings/${bookingId}/refund/`, {
+    method: "POST",
+    accessToken,
+    body: JSON.stringify({ reason: reason ?? "Refund at front desk" }),
     idempotencyKey: crypto.randomUUID(),
   });
 }

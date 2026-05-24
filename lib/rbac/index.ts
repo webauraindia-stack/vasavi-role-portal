@@ -174,10 +174,6 @@ export const PORTAL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard", permission: "analytics.dashboard" },
   { href: "/dashboard/bookings", label: "Bookings", icon: "CalendarCheck", permission: "bookings.view" },
   { href: "/dashboard/extensions", label: "Stay extensions", icon: "CalendarClock", permission: "bookings.extend" },
-  { href: "/dashboard/check-in", label: "Check-in / out", icon: "QrCode", permission: "bookings.checkin" },
-  { href: "/dashboard/donors", label: "Donors (verify)", icon: "Crown", permission: "donors.view" },
-  { href: "/dashboard/members", label: "Members", icon: "Users", permission: "guests.view" },
-  { href: "/dashboard/rooms", label: "Rooms", icon: "BedDouble", permission: "rooms.view" },
   { href: "/dashboard/payments", label: "Payments", icon: "CreditCard", permission: "payments.view" },
   { href: "/dashboard/reports", label: "Reports", icon: "BarChart3", permission: "analytics.bookings" },
   { href: "/dashboard/support", label: "Support", icon: "Headphones", permission: "support.view" },
@@ -189,13 +185,12 @@ export const PORTAL_NAV: NavItem[] = [
   { href: "/admin/cms", label: "CMS", icon: "FileText", permission: "cms.homepage" },
   { href: "/admin/finance", label: "Finance", icon: "Wallet", permission: "finance.transactions" },
   { href: "/admin/extensions", label: "Extension analytics", icon: "CalendarClock", permission: "audit.view" },
-  { href: "/admin/admins", label: "Admin accounts", icon: "UserCog", permission: "admins.view" },
+  { href: "/admin/branches", label: "Branch Management", icon: "Building", permission: "admins.view" },
   { href: "/admin/settings", label: "Platform settings", icon: "Settings", permission: "settings.view" },
 ];
 
 /** Route prefix → required permission (most specific match wins) */
 export const ROUTE_PERMISSIONS: { prefix: string; permission: Permission }[] = [
-  { prefix: "/admin/admins", permission: "admins.view" },
   { prefix: "/admin/donations", permission: "donations.view" },
   { prefix: "/admin/cms", permission: "cms.homepage" },
   { prefix: "/admin/finance", permission: "finance.transactions" },
@@ -207,10 +202,6 @@ export const ROUTE_PERMISSIONS: { prefix: string; permission: Permission }[] = [
   { prefix: "/dashboard/extensions", permission: "bookings.extend" },
   { prefix: "/admin/extensions", permission: "audit.view" },
   { prefix: "/dashboard/bookings", permission: "bookings.view" },
-  { prefix: "/dashboard/check-in", permission: "bookings.checkin" },
-  { prefix: "/dashboard/donors", permission: "donors.view" },
-  { prefix: "/dashboard/members", permission: "guests.view" },
-  { prefix: "/dashboard/rooms", permission: "rooms.view" },
   { prefix: "/dashboard/payments", permission: "payments.view" },
   { prefix: "/dashboard/reports", permission: "analytics.bookings" },
   { prefix: "/dashboard/support", permission: "support.view" },
@@ -312,9 +303,56 @@ export function permissionForPath(pathname: string): Permission | null {
   return null;
 }
 
-export function canAccessPath(pathname: string, permissions: Permission[]): boolean {
+export type PortalAccessContext = {
+  hotelId?: string;
+};
+
+export function branchRoomsHref(branchId: string): string {
+  return `/admin/branches/${branchId}`;
+}
+
+/** Branch-scoped nav for hotel admins (rooms live under branch detail). */
+export function extraNavForUser(user: PortalUser): NavItem[] {
+  if (
+    user.role === "admin" &&
+    user.hotelId &&
+    user.permissions.includes("rooms.view")
+  ) {
+    return [
+      {
+        href: branchRoomsHref(user.hotelId),
+        label: "Rooms",
+        icon: "BedDouble",
+        permission: "rooms.view",
+      },
+    ];
+  }
+  return [];
+}
+
+export function canAccessPath(
+  pathname: string,
+  permissions: Permission[],
+  context?: PortalAccessContext
+): boolean {
   const path = pathname.split("?")[0];
   if (path === "/profile") return true;
+  if (path === "/dashboard/rooms") {
+    return permissions.includes("rooms.view");
+  }
+  if (path === "/admin/branches") {
+    return permissions.includes("admins.view");
+  }
+  const branchDetail = path.match(/^\/admin\/branches\/([^/]+)$/);
+  if (branchDetail) {
+    if (permissions.includes("admins.view")) return true;
+    const branchId = branchDetail[1];
+    return (
+      permissions.includes("rooms.view") &&
+      !!context?.hotelId &&
+      context.hotelId === branchId
+    );
+  }
   if (path === "/dashboard") {
     return canAccessDashboard(permissions);
   }

@@ -18,13 +18,16 @@ import {
 import { notificationsFromBookings } from "@/lib/analytics/notifications";
 import { listManagerHotels } from "@/lib/api/branches";
 import {
-  createBooking,
+  extendBookingStay,
   listBookings,
   mapManagerBooking,
   recordCashPaymentApi,
+  refundBookingPaymentApi,
   updateBookingStatusApi,
 } from "@/lib/api/bookings";
+import { createStaffManualBooking } from "@/lib/api/staff-operations";
 import { listRoomInventory } from "@/lib/api/properties";
+import { updateStaffRoom } from "@/lib/api/staff-rooms";
 import {
   listDonors,
   mapListDonorToPlatform,
@@ -49,6 +52,11 @@ interface ManagerState {
   refreshFromApi: (accessToken: string) => Promise<void>;
   updateBookingStatus: (id: string, status: ManagerBooking["bookingStatus"]) => void;
   recordCashPayment: (bookingId: string, notes?: string) => Promise<{ ok: boolean; error?: string }>;
+  refundBookingPayment: (bookingId: string, reason?: string) => Promise<{ ok: boolean; error?: string }>;
+  extendBookingCheckout: (
+    bookingId: string,
+    newCheckOut: string
+  ) => Promise<{ ok: boolean; error?: string }>;
   assignRoom: (bookingId: string, roomNumber: string) => void;
   setRoomStatus: (roomId: string, status: RoomInventory["status"], meta?: Partial<RoomInventory>) => void;
   extendRoomHold: (roomId: string, untilDate: string) => void;
@@ -148,33 +156,94 @@ export const useManagerStore = create<ManagerState>()(
       },
 
       updateBookingStatus: (id, bookingStatus) => {
+        const booking = get().bookings.find((b) => b.id === id);
+        const applyRoomStatus = (roomStatus: RoomInventory["status"] | null) => {
+          if (!booking?.roomId || !roomStatus) return;
+          get().setRoomStatus(booking.roomId, roomStatus);
+        };
+
+        if (bookingStatus === "checked_in") applyRoomStatus("occupied");
+        if (bookingStatus === "checked_out" || bookingStatus === "cancelled") {
+          applyRoomStatus("available");
+        }
+
         set({
           bookings: get().bookings.map((b) =>
             b.id === id ? { ...b, bookingStatus } : b
           ),
         });
+
         const token = useAuthStore.getState().accessToken;
-        if (token) {
-          const backendStatus =
-            bookingStatus === "checked_in"
-              ? "checked_in"
-              : bookingStatus === "checked_out"
-                ? "checked_out"
-                : bookingStatus === "cancelled"
-                  ? "cancelled"
-                  : bookingStatus === "confirmed"
-                    ? "confirmed"
-                    : "pending";
-          void updateBookingStatusApi(
-            token,
-            id,
-            backendStatus,
-            bookingStatus === "cancelled" ? "Cancelled from portal" : undefined
-          )
-            .then(() => get().refreshFromApi(token))
-            .catch(() => {
-              /* optimistic UI kept */
+        if (!token) return;
+
+        const backendStatus =
+          bookingStatus === "checked_in"
+            ? "checked_in"
+            : bookingStatus === "checked_out"
+              ? "checked_out"
+              : bookingStatus === "cancelled"
+                ? "cancelled"
+                : bookingStatus === "confirmed"
+                  ? "confirmed"
+                  : "pending";
+
+        void updateBookingStatusApi(
+          token,
+          id,
+          backendStatus,
+          bookingStatus === "cancelled" ? "Cancelled from portal" : undefined
+        )
+          .then((updated) => {
+            const mapped = mapManagerBooking(updated);
+            set({
+              bookings: get().bookings.map((b) => (b.id === id ? mapped : b)),
             });
+            return get().refreshFromApi(token);
+          })
+          .catch(() => {
+            /* optimistic UI kept */
+          });
+      },
+
+      extendBookingCheckout: async (bookingId, newCheckOut) => {
+        const token = useAuthStore.getState().accessToken;
+        if (!token) return { ok: false, error: "Not signed in." };
+        try {
+          const mapped = await extendBookingStay(
+            token,
+            bookingId,
+            newCheckOut,
+            "Checkout extended at front desk"
+          );
+          set({
+            bookings: get().bookings.map((b) => (b.id === bookingId ? mapped : b)),
+          });
+          await get().refreshFromApi(token);
+          return { ok: true };
+        } catch (err) {
+          return {
+            ok: false,
+            error: err instanceof Error ? err.message : "Could not extend stay.",
+          };
+        }
+      },
+
+      refundBookingPayment: async (bookingId, reason) => {
+        const token = useAuthStore.getState().accessToken;
+        if (!token) return { ok: false, error: "Not signed in." };
+        try {
+          const updated = await refundBookingPaymentApi(token, bookingId, reason);
+          const mapped = mapManagerBooking(updated);
+          set({
+            bookings: get().bookings.map((b) => (b.id === bookingId ? mapped : b)),
+          });
+          await get().refreshFromApi(token);
+          return { ok: true };
+        } catch (err) {
+          return {
+            ok: false,
+            error: err instanceof Error ? err.message : "Could not process refund.",
+          };
         }
       },
 
@@ -206,19 +275,36 @@ export const useManagerStore = create<ManagerState>()(
           ),
         }),
 
-      setRoomStatus: (roomId, status, meta) =>
+      setRoomStatus: (roomId, status, meta) => {
         set({
           rooms: get().rooms.map((r) => {
             if (r.id !== roomId) return r;
-            const next = { ...r, status, ...meta };
+            const next: RoomInventory = { ...r, status, ...meta };
             if (status === "available") {
+              next.operationalStatus = "available";
               delete next.blockedReason;
               delete next.blockedUntil;
               delete next.maintenanceUntil;
             }
             return next;
           }),
-        }),
+        });
+        const token = useAuthStore.getState().accessToken;
+        if (!token || status === "occupied") return;
+
+        const operational: NonNullable<RoomInventory["operationalStatus"]> =
+          status === "blocked"
+            ? "blocked"
+            : status === "maintenance"
+              ? "maintenance"
+              : "available";
+
+        void updateStaffRoom(token, roomId, { operational_status: operational })
+          .then(() => get().refreshFromApi(token))
+          .catch(() => {
+            /* keep optimistic UI */
+          });
+      },
 
       extendRoomHold: (roomId, untilDate) =>
         set({
@@ -330,7 +416,9 @@ export const useManagerStore = create<ManagerState>()(
 
         if (token) {
           try {
-            const created = await createBooking(token, {
+            const recordCash =
+              input.paymentStatus === "paid" || input.paymentStatus === "free_stay";
+            const created = await createStaffManualBooking(token, {
               room_id: room.id,
               check_in_date: input.checkIn,
               check_out_date: input.checkOut,
@@ -338,9 +426,13 @@ export const useManagerStore = create<ManagerState>()(
               guest_name: input.guestName,
               guest_phone: input.guestPhone,
               notes: input.specialRequests,
+              source: input.source,
+              record_cash_payment: recordCash,
+              check_in_immediately: input.bookingStatus === "checked_in",
             });
+            const mapped = mapManagerBooking(created);
             await get().refreshFromApi(token);
-            return { success: true, booking: created };
+            return { success: true, booking: mapped };
           } catch (err) {
             return {
               success: false,
