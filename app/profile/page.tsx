@@ -12,8 +12,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useAuthStore, useAuthUser } from "@/stores/auth-store";
+import { useAuthUser } from "@/stores/auth-store";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
+import { useSignOut } from "@/hooks/use-sign-out";
 import { navForUser } from "@/lib/rbac";
 import {
   formatPermissionList,
@@ -22,12 +23,10 @@ import {
   getRoleBadgeClass,
 } from "@/lib/portal-profile";
 import { isHotelScopedAdmin } from "@/lib/hotel-scope";
-import { useRouter } from "next/navigation";
 
 export default function ProfilePage() {
-  const router = useRouter();
   const user = useAuthUser();
-  const logout = useAuthStore((s) => s.logout);
+  const signOut = useSignOut();
   const { hotelLabel, locked, viewAll } = useHotelScope();
 
   if (!user) return null;
@@ -35,11 +34,6 @@ export default function ProfilePage() {
   const accountType = getAccountTypeLabel(user);
   const navItems = navForUser(user.permissions);
   const permissionLabels = formatPermissionList(user.permissions);
-
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
-  };
 
   return (
     <div className="min-h-full">
@@ -220,7 +214,7 @@ export default function ProfilePage() {
           </Link>
           <Button
             variant="outline"
-            onClick={handleLogout}
+            onClick={() => void signOut()}
             className="gap-2 border-rose-200 text-rose-800 hover:bg-rose-50"
           >
             <LogOut className="h-4 w-4" />

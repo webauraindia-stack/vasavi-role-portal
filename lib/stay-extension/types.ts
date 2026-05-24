@@ -85,26 +85,26 @@ export interface ExtensionAnalytics {
   byStatus: Record<string, number>;
 }
 
-export type ExtensionBookingContext = Pick<
-  ManagerBooking,
-  | "id"
-  | "reference"
-  | "hotelId"
-  | "hotelName"
-  | "guestName"
-  | "guestEmail"
-  | "guestPhone"
-  | "roomType"
-  | "roomNumber"
-  | "checkIn"
-  | "checkOut"
-  | "nights"
-  | "subtotal"
-  | "taxes"
-  | "total"
-  | "bookingStatus"
-  | "paymentStatus"
->;
+/** Subset of booking fields used by stay-extension engine (rupees for pricing). */
+export interface ExtensionBookingContext {
+  id: string;
+  reference: string;
+  hotelId: string;
+  hotelName: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  roomType: string;
+  roomNumber?: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  subtotal: number;
+  taxes: number;
+  total: number;
+  bookingStatus: ManagerBooking["bookingStatus"];
+  paymentStatus: ManagerBooking["paymentStatus"];
+}
 
 export type ExtensionRoomContext = Pick<
   RoomInventory,

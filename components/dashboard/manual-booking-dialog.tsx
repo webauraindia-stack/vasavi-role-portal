@@ -66,15 +66,13 @@ export function ManualBookingDialog({
     hotelId === "all" ? (branches[0]?.id ?? "") : hotelId
   );
   const [guestName, setGuestName] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [memberId, setMemberId] = useState("");
   const [guestType, setGuestType] = useState<GuestType>("visitor");
   const [checkIn, setCheckIn] = useState(today);
   const [checkOut, setCheckOut] = useState(defaultOut);
   const [roomId, setRoomId] = useState("");
   const [source, setSource] = useState<"walk_in" | "phone">("walk_in");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("unpaid");
   const [checkInNow, setCheckInNow] = useState(true);
   const [specialRequests, setSpecialRequests] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +110,7 @@ export function ManualBookingDialog({
     void searchStaffRooms(accessToken, {
       check_in: checkIn,
       check_out: checkOut,
-      guests: 2,
+      guests: 1, // simplified
       branch_id: effectiveHotelId,
     })
       .then((rows) => {
@@ -214,9 +212,7 @@ export function ManualBookingDialog({
       hotelId: effectiveHotelId,
       hotelName: effectiveHotelName,
       guestName,
-      guestEmail: guestEmail.trim() || `${guestPhone.replace(/\D/g, "")}@walkin.local`,
       guestPhone,
-      memberId: memberId || undefined,
       guestType,
       roomId: effectiveRoomId,
       checkIn,
@@ -228,7 +224,7 @@ export function ManualBookingDialog({
     };
 
     setSubmitting(true);
-    const result = await createManualBooking(input);
+    const result = await createManualBooking(input, accessToken ?? undefined);
     setSubmitting(false);
 
     if (!result.success) {
@@ -242,15 +238,13 @@ export function ManualBookingDialog({
   const handleClose = () => {
     setPropertyId(hotelId === "all" ? "1" : hotelId);
     setGuestName("");
-    setGuestEmail("");
     setGuestPhone("");
-    setMemberId("");
     setGuestType("visitor");
     setCheckIn(today);
     setCheckOut(defaultOut);
     setRoomId("");
     setSource("walk_in");
-    setPaymentStatus("paid");
+    setPaymentStatus("unpaid");
     setCheckInNow(true);
     setSpecialRequests("");
     setError(null);
@@ -325,17 +319,6 @@ export function ManualBookingDialog({
                 </Field>
                 <Field label="Phone *">
                   <Input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} />
-                </Field>
-                <Field label="Email">
-                  <Input
-                    type="email"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="Optional for walk-ins"
-                  />
-                </Field>
-                <Field label="Member / donor ID">
-                  <Input value={memberId} onChange={(e) => setMemberId(e.target.value)} />
                 </Field>
               </div>
 
@@ -457,16 +440,15 @@ export function ManualBookingDialog({
               )}
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Payment">
+                <Field label="Payment collection">
                   <select
                     value={paymentStatus}
                     onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
                     disabled={guestType === "free_stay_eligible"}
                     className="w-full h-9 rounded-lg border border-beige/60 px-3 text-sm disabled:opacity-50"
                   >
-                    <option value="paid">Paid (cash / UPI / card)</option>
-                    <option value="pending">Pay at checkout</option>
-                    <option value="partial">Partial payment</option>
+                    <option value="unpaid">Pay at front desk (Unpaid)</option>
+                    <option value="paid">Already paid in full (Cash/UPI)</option>
                   </select>
                 </Field>
                 <Field label="On arrival">
@@ -476,8 +458,9 @@ export function ManualBookingDialog({
                       checked={checkInNow}
                       onChange={(e) => setCheckInNow(e.target.checked)}
                       className="rounded border-beige"
+                      disabled={paymentStatus !== "paid"} // Requires paid status
                     />
-                    Check guest in immediately
+                    Check guest in immediately {paymentStatus !== "paid" && "(Requires payment)"}
                   </label>
                 </Field>
               </div>

@@ -19,6 +19,7 @@ import {
   listBookings,
 } from "@/lib/api/bookings";
 import { listRoomInventory } from "@/lib/api/properties";
+import { managerBookingToExtensionContext } from "@/lib/stay-extension/booking-context";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       if (alt) roomNumber = alt.number;
     }
 
-    const ctx = { ...booking, roomNumber };
+    const ctx = { ...managerBookingToExtensionContext(booking), roomNumber };
     const availability = checkRoomAvailabilityForExtension(
       ctx,
       requestedCheckOut,
@@ -93,8 +94,8 @@ export async function POST(request: Request) {
       hotelId: booking.hotelId,
       hotelName: booking.hotelName,
       guestName: booking.guestName,
-      guestEmail: booking.guestEmail,
-      guestPhone: booking.guestPhone,
+      guestEmail: ctx.guestEmail,
+      guestPhone: ctx.guestPhone,
       roomNumber,
       roomType: booking.roomType,
       originalCheckOut: booking.checkOut,
@@ -108,8 +109,8 @@ export async function POST(request: Request) {
       paymentMethod,
       approvalSource: pricing && shouldAutoApprove(pricing) ? "auto" : undefined,
       notificationsSent: [
-        `email:${booking.guestEmail}:extension_${status}`,
-        `sms:${booking.guestPhone}:extension_${status}`,
+        `email:${ctx.guestEmail}:extension_${status}`,
+        `sms:${ctx.guestPhone}:extension_${status}`,
       ],
     });
 
@@ -173,7 +174,7 @@ export async function PATCH(request: Request) {
         const booking = await getBookingByReference(token, updated.bookingReference);
         if (booking && updated.pricing) {
           updated.pricing = calculateExtensionPricing(
-            booking,
+            managerBookingToExtensionContext(booking),
             updated.requestedCheckOut,
             waived
           );

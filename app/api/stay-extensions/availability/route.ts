@@ -6,6 +6,7 @@ import {
 import { resolveAccessToken } from "@/lib/api/server-backend";
 import { getBookingByReference, listBookings } from "@/lib/api/bookings";
 import { listRoomInventory } from "@/lib/api/properties";
+import { managerBookingToExtensionContext } from "@/lib/stay-extension/booking-context";
 
 export async function GET(request: Request) {
   const token = await resolveAccessToken(request);
@@ -33,15 +34,17 @@ export async function GET(request: Request) {
     const allBookings = await listBookings(token);
     const rooms = await listRoomInventory(token, allBookings);
 
+    const extensionBooking = managerBookingToExtensionContext(booking);
+
     const availability = checkRoomAvailabilityForExtension(
-      booking,
+      extensionBooking,
       requestedCheckOut,
       allBookings,
       rooms
     );
     const pricing =
       availability.available || availability.alternatives.length
-        ? calculateExtensionPricing(booking, requestedCheckOut)
+        ? calculateExtensionPricing(extensionBooking, requestedCheckOut)
         : null;
 
     return NextResponse.json({

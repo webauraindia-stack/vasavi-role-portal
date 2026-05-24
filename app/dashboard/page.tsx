@@ -14,15 +14,15 @@ import {
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { ManualBookingTrigger } from "@/components/dashboard/manual-booking-dialog";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
+import { useDashboardAnalytics } from "@/hooks/use-analytics";
+import { chartPointsToDailyRevenue } from "@/lib/api/analytics";
 import { StatsGrid } from "@/components/dashboard/stats-grid";
 import { BookingTable } from "@/components/dashboard/booking-table";
 import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
 import {
   useManagerStore,
   getStoreBookings,
-  getStoreRooms,
   getStoreNotifications,
-  revenueFromBookings,
 } from "@/stores/manager-store";
 
 export default function DashboardOverviewPage() {
@@ -31,14 +31,14 @@ export default function DashboardOverviewPage() {
   const { hotelId, hotelName, viewAll } = useHotelScope();
   const {
     bookings,
-    rooms,
     notifications,
     markNotificationRead,
-    updateBookingStatus,
     dataLoaded,
     isRefreshing,
     dataError,
   } = useManagerStore();
+  const { data: analytics, loading: analyticsLoading, error: analyticsError } =
+    useDashboardAnalytics();
 
   const filteredBookings = useMemo(
     () => getStoreBookings(hotelId, bookings),
@@ -50,19 +50,17 @@ export default function DashboardOverviewPage() {
     [filteredBookings]
   );
 
-  const filteredRooms = useMemo(
-    () => getStoreRooms(hotelId, rooms),
-    [hotelId, rooms]
-  );
-
   const scopedNotifications = useMemo(
     () => getStoreNotifications(hotelId, notifications).slice(0, 6),
     [hotelId, notifications]
   );
 
   const revenueChart = useMemo(
-    () => revenueFromBookings(filteredBookings),
-    [filteredBookings]
+    () =>
+      analytics?.revenue_chart
+        ? chartPointsToDailyRevenue(analytics.revenue_chart)
+        : [],
+    [analytics]
   );
 
   return (
@@ -80,6 +78,11 @@ export default function DashboardOverviewPage() {
             {dataError}
           </p>
         )}
+        {analyticsError && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {analyticsError}
+          </p>
+        )}
         {unauthorized && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             You tried to open a module your role cannot access. Use the sidebar for your assigned areas.
@@ -92,16 +95,12 @@ export default function DashboardOverviewPage() {
             viewAll={viewAll}
           />
         </div>
-        <StatsGrid bookings={filteredBookings} rooms={filteredRooms} />
+        <StatsGrid stats={analytics?.stats ?? null} loading={analyticsLoading} />
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 card-manager p-4">
             <h2 className="font-display text-base mb-4">Recent bookings (live feed)</h2>
-            <BookingTable
-              bookings={filtered}
-              onStatusChange={updateBookingStatus}
-              compact
-            />
+            <BookingTable bookings={filtered} compact />
           </div>
           <div>
             <h2 className="font-display text-base mb-3">Alerts</h2>
@@ -113,23 +112,34 @@ export default function DashboardOverviewPage() {
         </div>
 
         <div className="card-manager p-4">
-          <h2 className="font-display text-base mb-4">7-day revenue & donor savings</h2>
+          <h2 className="font-display text-base mb-4">
+            7-day collections & donor savings
+          </h2>
+          <p className="text-xs text-muted mb-3">
+            Paid bookings by payment date (matches the cards above).
+          </p>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revenueChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f5e6ca" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
-                <Bar dataKey="revenue" fill="#7f1d1d" name="Revenue" radius={[4, 4, 0, 0]} />
-                <Bar
-                  dataKey="donorSavings"
-                  fill="#c9a84c"
-                  name="Donor savings"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {analyticsLoading ? (
+              <p className="text-sm text-muted">Loading chart…</p>
+            ) : revenueChart.length === 0 ? (
+              <p className="text-sm text-muted">No revenue data for this period.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueChart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f5e6ca" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number) => `₹${v.toLocaleString("en-IN")}`} />
+                  <Bar dataKey="revenue" fill="#7f1d1d" name="Revenue" radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="donorSavings"
+                    fill="#c9a84c"
+                    name="Donor savings"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>

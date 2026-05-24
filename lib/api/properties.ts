@@ -4,17 +4,46 @@ import type { StaffRoomDto } from "@/lib/api/staff-rooms";
 
 export type BackendRoom = StaffRoomDto;
 
-function resolveRoomStatus(room: StaffRoomDto, bookings: ManagerBooking[]): RoomStatus {
+export function resolveRoomDisplayStatus(
+  room: Pick<
+    RoomInventory,
+    "id" | "hotelId" | "number" | "isActive" | "operationalStatus"
+  >,
+  bookings: ManagerBooking[]
+): RoomStatus {
   const occupied = bookings.some((b) => {
-    if (b.hotelId !== room.branch.id) return false;
-    if (b.roomNumber !== room.room_number) return false;
-    return b.bookingStatus === "checked_in";
+    if (b.bookingStatus !== "checked_in") return false;
+    if (b.roomId && b.roomId === room.id) return true;
+    if (b.hotelId !== room.hotelId) return false;
+    return b.roomNumber === room.number;
   });
   if (occupied) return "occupied";
-  if (!room.is_active) return "maintenance";
-  if (room.operational_status === "blocked") return "blocked";
-  if (room.operational_status === "maintenance") return "maintenance";
+  if (room.isActive === false) return "maintenance";
+  if (room.operationalStatus === "blocked") return "blocked";
+  if (room.operationalStatus === "maintenance") return "maintenance";
   return "available";
+}
+
+export function recomputeRoomDisplayStatuses(
+  rooms: RoomInventory[],
+  bookings: ManagerBooking[]
+): RoomInventory[] {
+  return rooms.map((room) => ({
+    ...room,
+    status: resolveRoomDisplayStatus(room, bookings),
+  }));
+}
+
+function resolveRoomStatus(room: StaffRoomDto, bookings: ManagerBooking[]): RoomStatus {
+  const base: Pick<RoomInventory, "id" | "hotelId" | "number" | "isActive" | "operationalStatus"> =
+    {
+      id: room.id,
+      hotelId: room.branch.id,
+      number: room.room_number,
+      isActive: room.is_active,
+      operationalStatus: room.operational_status,
+    };
+  return resolveRoomDisplayStatus(base, bookings);
 }
 
 export function mapRoomToInventory(

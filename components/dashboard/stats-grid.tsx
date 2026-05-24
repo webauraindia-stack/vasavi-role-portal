@@ -8,65 +8,62 @@ import {
   Percent,
   Users,
 } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
-import type { ManagerBooking, RoomInventory } from "@/lib/types";
+import type { DashboardAnalyticsStats } from "@/lib/api/analytics";
+import { cn } from "@/lib/utils";
 
 export function StatsGrid({
-  bookings,
-  rooms,
+  stats,
+  loading,
 }: {
-  bookings: ManagerBooking[];
-  rooms: RoomInventory[];
+  stats: DashboardAnalyticsStats | null;
+  loading?: boolean;
 }) {
-  const today = bookings.filter((b) => b.bookingStatus !== "cancelled");
-  const revenue = today.reduce((s, b) => s + b.total, 0);
-  const donorSavings = today.reduce(
-    (s, b) => s + b.tierDiscount + b.couponDiscount + b.walletApplied,
-    0
-  );
-  const checkInsToday = bookings.filter((b) => b.checkIn === "2026-05-20").length;
-  const vip = bookings.filter((b) => b.isVip && b.bookingStatus === "confirmed").length;
-  const occupied = rooms.filter((r) => r.status === "occupied").length;
-  const available = rooms.filter((r) => r.status === "available").length;
-  const occupancy = rooms.length
-    ? Math.round((occupied / rooms.length) * 100)
-    : 0;
+  if (loading || !stats) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="stat-card animate-pulse h-24 bg-beige/20" />
+        ))}
+      </div>
+    );
+  }
 
-  const stats = [
+  const items = [
     {
-      label: "Today's revenue",
-      value: formatCurrency(revenue),
+      label: "Collected today",
+      value: stats.today_revenue_display,
+      sub: `${stats.today_collected_bookings ?? 0} payment(s) · 7d ${stats.revenue_7d_display ?? "—"}`,
       icon: IndianRupee,
       tone: "text-champagne",
     },
     {
       label: "Active bookings",
-      value: String(today.length),
+      value: String(stats.active_bookings),
       icon: CalendarCheck,
       tone: "text-charcoal",
     },
     {
       label: "Check-ins today",
-      value: String(checkInsToday),
+      value: String(stats.check_ins_today),
       icon: Users,
       tone: "text-charcoal",
     },
     {
       label: "Occupancy",
-      value: `${occupancy}%`,
-      sub: `${available} rooms free`,
+      value: `${stats.occupancy_percent}%`,
+      sub: `${stats.available_rooms} rooms free`,
       icon: BedDouble,
       tone: "text-charcoal",
     },
     {
-      label: "Donor savings applied",
-      value: formatCurrency(donorSavings),
+      label: "Donor savings (7d)",
+      value: stats.donor_savings_display,
       icon: Crown,
       tone: "text-champagne-dark",
     },
     {
       label: "VIP arrivals",
-      value: String(vip),
+      value: String(stats.vip_arrivals),
       icon: Percent,
       tone: "text-charcoal",
     },
@@ -74,7 +71,7 @@ export function StatsGrid({
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-      {stats.map((s) => {
+      {items.map((s) => {
         const Icon = s.icon;
         return (
           <div key={s.label} className="stat-card">

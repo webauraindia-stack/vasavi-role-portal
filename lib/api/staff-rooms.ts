@@ -82,6 +82,22 @@ export async function updateStaffRoom(
   });
 }
 
+export type RoomOperationalStatus = "available" | "blocked" | "maintenance";
+
+/** Persist staff operational status (available / blocked / maintenance). */
+export async function updateRoomOperationalStatusApi(
+  accessToken: string,
+  roomId: string,
+  operationalStatus: RoomOperationalStatus
+): Promise<StaffRoomDto> {
+  return apiFetch<StaffRoomDto>(`staff/rooms/${roomId}/operational-status/`, {
+    method: "PATCH",
+    accessToken,
+    body: JSON.stringify({ operational_status: operationalStatus }),
+    idempotencyKey: crypto.randomUUID(),
+  });
+}
+
 export async function uploadRoomImage(
   accessToken: string,
   roomId: string,

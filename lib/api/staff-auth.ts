@@ -18,6 +18,7 @@ export type StaffUser = {
 
 export type StaffLoginResult = {
   access: string;
+  access_expires_in?: number;
   user: StaffUser;
 };
 
@@ -36,11 +37,11 @@ export async function verifyStaffOtp(phone: string, otp: string) {
   });
 }
 
+/** @deprecated Use `refreshStaffAccessToken` from `@/lib/auth/refresh-staff-token` */
 export async function refreshStaffToken() {
-  return apiFetch<{ access: string }>("staff/token/refresh/", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+  const { refreshStaffAccessToken } = await import("@/lib/auth/refresh-staff-token");
+  const { access } = await refreshStaffAccessToken();
+  return { access };
 }
 
 export async function fetchStaffMe(accessToken: string) {

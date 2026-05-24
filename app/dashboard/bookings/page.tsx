@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { BookingList } from "@/components/dashboard/booking-table";
 import { ManualBookingTrigger } from "@/components/dashboard/manual-booking-dialog";
@@ -14,6 +14,7 @@ export default function BookingsPage() {
     bookings,
     updateBookingStatus,
     recordCashPayment,
+    cancelBooking,
     refundBookingPayment,
     extendBookingCheckout,
     refreshFromApi,
@@ -28,6 +29,11 @@ export default function BookingsPage() {
     () => getStoreBookings(hotelId, bookings),
     [bookings, hotelId]
   );
+
+  const requireToken = useCallback((): { ok: false; error: string } | null => {
+    if (!accessToken) return { ok: false, error: "Not signed in." };
+    return null;
+  }, [accessToken]);
 
   return (
     <>
@@ -46,27 +52,39 @@ export default function BookingsPage() {
         </div>
         <BookingList
           bookings={scopedBookings}
-          onStatusChange={updateBookingStatus}
+          onStatusChange={async (id, status, reason) => {
+            const denied = requireToken();
+            if (denied) return denied;
+            return updateBookingStatus(id, status, accessToken!, reason);
+          }}
           onRecordCash={async (id) => {
-            const result = await recordCashPayment(id, "Recorded at front desk");
-            if (!result.ok && result.error) {
-              window.alert(result.error);
-            }
+            const denied = requireToken();
+            if (denied) return denied;
+            return recordCashPayment(id, accessToken!, {
+              notes: "Recorded at front desk",
+            });
           }}
-          onRefund={async (id) => {
-            if (
-              !window.confirm(
-                "Mark this booking as refunded? Use this when payment was returned to the guest."
-              )
-            ) {
-              return;
-            }
-            const result = await refundBookingPayment(id, "Refund at front desk");
-            if (!result.ok && result.error) {
-              window.alert(result.error);
-            }
+          onCancel={async (id, reason, refundType, refundAmountPaise, refundReference) => {
+            const denied = requireToken();
+            if (denied) return denied;
+
+            const cancelRes = await cancelBooking(id, accessToken!, reason);
+            if (!cancelRes.ok) return cancelRes;
+
+            if (refundType === "none") return cancelRes;
+
+            return refundBookingPayment(id, accessToken!, {
+              reason,
+              refundAmountPaise:
+                refundType === "partial" ? refundAmountPaise : undefined,
+              refundReference,
+            });
           }}
-          onExtendCheckout={extendBookingCheckout}
+          onExtendCheckout={async (id, newCheckOut) => {
+            const denied = requireToken();
+            if (denied) return denied;
+            return extendBookingCheckout(id, accessToken!, newCheckOut);
+          }}
         />
       </div>
     </>

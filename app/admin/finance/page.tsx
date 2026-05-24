@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,22 +11,12 @@ import {
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import { Can } from "@/components/rbac/can";
 import { PlatformModuleHeader } from "@/components/admin/platform-module-header";
-import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
+import { useFinanceAnalytics } from "@/hooks/use-analytics";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
-import { formatINR } from "@/lib/utils";
 
 export default function FinanceAdminPage() {
-  const { hotelId, viewAll } = useHotelScope();
-  const bookings = useManagerStore((s) => s.bookings);
-  const scoped = useMemo(
-    () => getStoreBookings(hotelId, bookings),
-    [hotelId, bookings]
-  );
-
-  const paid = scoped.filter((b) => b.paymentStatus === "paid");
-  const pending = scoped.filter((b) => b.paymentStatus === "pending");
-  const totalRevenue = paid.reduce((s, b) => s + b.total, 0);
-  const pendingAmount = pending.reduce((s, b) => s + b.total, 0);
+  const { viewAll } = useHotelScope();
+  const { data, loading, error } = useFinanceAnalytics();
 
   return (
     <PermissionGuard
@@ -48,25 +37,37 @@ export default function FinanceAdminPage() {
         }
       />
       <div className="mx-auto max-w-5xl space-y-6 p-6">
+        {error && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </p>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="card-manager p-4">
             <p className="text-[10px] font-bold uppercase text-muted">Collected</p>
             <p className="mt-1 text-2xl font-bold text-emerald-800">
-              {formatINR(totalRevenue)}
+              {loading ? "…" : (data?.collected_display ?? "₹0.00")}
             </p>
-            <p className="text-xs text-muted mt-1">{paid.length} paid bookings</p>
+            <p className="text-xs text-muted mt-1">
+              {loading ? "" : `${data?.paid_bookings ?? 0} paid bookings`}
+            </p>
           </div>
           <div className="card-manager p-4">
             <p className="text-[10px] font-bold uppercase text-muted">Pending</p>
             <p className="mt-1 text-2xl font-bold text-amber-800">
-              {formatINR(pendingAmount)}
+              {loading ? "…" : (data?.pending_display ?? "₹0.00")}
             </p>
-            <p className="text-xs text-muted mt-1">{pending.length} awaiting payment</p>
+            <p className="text-xs text-muted mt-1">
+              {loading ? "" : `${data?.unpaid_bookings ?? 0} awaiting payment`}
+            </p>
           </div>
           <div className="card-manager p-4">
             <p className="text-[10px] font-bold uppercase text-muted">Refunds queue</p>
-            <p className="mt-1 text-2xl font-bold text-charcoal">0</p>
-            <p className="text-xs text-muted mt-1">Connect refund workflow in production</p>
+            <p className="mt-1 text-2xl font-bold text-charcoal">
+              {loading ? "…" : (data?.refunds_queue ?? 0)}
+            </p>
+            <p className="text-xs text-muted mt-1">Refund pending approval</p>
           </div>
         </div>
 
@@ -129,7 +130,7 @@ function ModuleCard({
       <h2 className="font-bold text-charcoal">{title}</h2>
       <p className="text-sm text-muted mt-1">{description}</p>
       <p className="text-[10px] text-muted mt-3">
-        Figures from live bookings loaded for your role scope.
+        Figures from server-side analytics for your role scope.
       </p>
     </div>
   );

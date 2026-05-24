@@ -22,7 +22,7 @@ export interface ManualBookingInput {
   hotelId: string;
   hotelName: string;
   guestName: string;
-  guestEmail: string;
+  guestEmail?: string;
   guestPhone: string;
   memberId?: string;
   guestType: GuestType;
@@ -33,6 +33,7 @@ export interface ManualBookingInput {
   bookingStatus: "confirmed" | "checked_in";
   source: "walk_in" | "phone";
   specialRequests?: string;
+  guestCount?: number;
   createdBy?: string;
 }
 
@@ -210,6 +211,9 @@ export function buildManualBooking(
   const ref = `VH-${Date.now().toString(36).toUpperCase().slice(-6)}`;
   const isFreeStay = input.guestType === "free_stay_eligible" || pricing.total === 0;
 
+  const finalRupees = isFreeStay ? 0 : pricing.total;
+  const discountRupees = pricing.tierDiscount;
+
   const booking: ManagerBooking = {
     id: `bk-manual-${Date.now()}`,
     reference: ref,
@@ -217,30 +221,28 @@ export function buildManualBooking(
     hotelId: input.hotelId,
     hotelName: input.hotelName,
     guestName: input.guestName.trim(),
-    guestEmail: input.guestEmail.trim(),
     guestPhone: input.guestPhone.trim(),
-    memberId: input.memberId?.trim() || undefined,
     guestType: input.guestType,
     guestTypeLabel: guestTypeLabel(input.guestType),
-    donorTier: input.guestType === "kcgf_donor" ? "Gold" : undefined,
     roomType: room.name,
     roomNumber: room.number,
+    roomId: room.id,
     checkIn: input.checkIn,
     checkOut: input.checkOut,
     nights,
-    subtotal: pricing.subtotal,
-    tierDiscount: pricing.tierDiscount,
-    couponDiscount: 0,
-    walletApplied: 0,
-    taxes: pricing.taxes,
-    total: isFreeStay ? 0 : pricing.total,
+    guestCount: input.guestCount ?? 1,
+    baseAmountPaise: Math.round(pricing.subtotal * 100),
+    discountAmountPaise: Math.round(discountRupees * 100),
+    finalAmountPaise: Math.round(finalRupees * 100),
     paymentStatus: isFreeStay ? "free_stay" : input.paymentStatus,
     bookingStatus: input.bookingStatus,
-    specialRequests: input.specialRequests?.trim() || undefined,
+    notes: input.specialRequests?.trim() || undefined,
     source: input.source === "walk_in" || input.source === "phone" ? "in_house" : input.source,
     isInHouse: true,
-    roomId: room.id,
-    appliedCoupons: [],
+    refundAmount: 0,
+    couponCount: 0,
+    isCancellableByGuest: false,
+    needsRefundApproval: false,
     isVip: input.guestType === "kcgf_donor" || input.guestType === "sponsorship_patron",
     createdAt: new Date().toISOString(),
   };

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Ban, Check, RotateCcw, Search, Wrench } from "lucide-react";
+import { Ban, Check, Loader2, RotateCcw, Search, Wrench } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { AddRoomTrigger } from "@/components/admin/add-room-dialog";
 import { useAuthStore } from "@/stores/auth-store";
 import { Badge } from "@/components/ui/badge";
@@ -34,9 +35,12 @@ export function BranchRoomsPanel({
   minimal?: boolean;
 }) {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const { rooms, bookings, setRoomStatus, refreshFromApi } = useManagerStore();
+  const { rooms, bookings, updateRoomOperationalStatus, refreshFromApi } =
+    useManagerStore();
+  const toast = useToast();
 
   const [search, setSearch] = useState("");
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<RoomStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [donorOnly, setDonorOnly] = useState(false);
@@ -89,6 +93,30 @@ export function BranchRoomsPanel({
     setStatusFilter("all");
     setCategoryFilter("all");
     setDonorOnly(false);
+  };
+
+  const handleOperationalStatus = async (
+    roomId: string,
+    operationalStatus: "available" | "blocked" | "maintenance"
+  ) => {
+    if (!accessToken) {
+      toast.error("Sign in required to update room status.");
+      return;
+    }
+    setStatusBusyId(roomId);
+    const res = await updateRoomOperationalStatus(roomId, operationalStatus, accessToken);
+    setStatusBusyId(null);
+    if (res.ok) {
+      const label =
+        operationalStatus === "available"
+          ? "available"
+          : operationalStatus === "blocked"
+            ? "blocked"
+            : "under maintenance";
+      toast.success(`Room marked ${label}.`);
+    } else {
+      toast.error(res.error ?? "Could not update room status.");
+    }
   };
 
   return (
@@ -238,34 +266,49 @@ export function BranchRoomsPanel({
 
                   {room.status !== "occupied" && (
                     <div className="flex gap-1 mt-3 flex-wrap">
-                      {room.status !== "available" && (
+                      {room.operationalStatus !== "available" && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setRoomStatus(room.id, "available")}
+                          disabled={statusBusyId === room.id}
+                          onClick={() => void handleOperationalStatus(room.id, "available")}
                         >
-                          <Check className="h-3 w-3" /> Available
+                          {statusBusyId === room.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Check className="h-3 w-3" />
+                          )}{" "}
+                          Available
                         </Button>
                       )}
-                      {room.status !== "blocked" && (
+                      {room.operationalStatus !== "blocked" && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setRoomStatus(room.id, "blocked")}
+                          disabled={statusBusyId === room.id}
+                          onClick={() => void handleOperationalStatus(room.id, "blocked")}
                         >
                           <Ban className="h-3 w-3" /> Block
                         </Button>
                       )}
-                      {room.status !== "maintenance" && (
+                      {room.operationalStatus !== "maintenance" && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setRoomStatus(room.id, "maintenance")}
+                          disabled={statusBusyId === room.id}
+                          onClick={() =>
+                            void handleOperationalStatus(room.id, "maintenance")
+                          }
                         >
                           <Wrench className="h-3 w-3" /> Maintenance
                         </Button>
                       )}
                     </div>
+                  )}
+                  {room.status === "occupied" && (
+                    <p className="text-[10px] text-muted mt-2">
+                      Check the guest out before changing block or maintenance status.
+                    </p>
                   )}
                 </div>
               </div>

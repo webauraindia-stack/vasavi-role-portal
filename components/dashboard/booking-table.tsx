@@ -15,6 +15,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import { CancellationDialog } from "@/components/dashboard/cancellation-dialog";
 import type { ManagerBooking } from "@/lib/types";
 import {
   BOOKING_STATUS_COLORS,
@@ -56,12 +58,14 @@ export function BookingList({
   onStatusChange,
   onRecordCash,
   onRefund,
+  onCancel,
   onExtendCheckout,
 }: {
   bookings: ManagerBooking[];
-  onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"]) => void;
-  onRecordCash?: (id: string) => void | Promise<void>;
-  onRefund?: (id: string) => void | Promise<void>;
+  onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"], reason?: string) => Promise<{ ok: boolean; error?: string }>;
+  onRecordCash?: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  onRefund?: (id: string) => void;
+  onCancel?: (id: string, reason: string, refundType: "full" | "partial" | "none", refundAmountPaise?: number, refundReference?: string) => Promise<{ ok: boolean; error?: string }>;
   onExtendCheckout?: (
     id: string,
     newCheckOut: string
@@ -70,6 +74,12 @@ export function BookingList({
   const [query, setQuery] = useState("");
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  // Dialog state
+  const [cancelBookingObj, setCancelBookingObj] = useState<ManagerBooking | null>(null);
+  const [dialogBusy, setDialogBusy] = useState(false);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const toast = useToast();
 
   const filtered = useMemo(() => {
     let list = bookings;
@@ -85,7 +95,6 @@ export function BookingList({
           b.guestName.toLowerCase().includes(q) ||
           b.reference.toLowerCase().includes(q) ||
           b.roomNumber?.toLowerCase().includes(q) ||
-          b.memberId?.toLowerCase().includes(q) ||
           b.guestPhone.toLowerCase().includes(q)
       );
     }
@@ -102,8 +111,46 @@ export function BookingList({
     [bookings]
   );
 
+  const handleAction = async (id: string, action: () => Promise<{ ok: boolean; error?: string }>, successMsg: string) => {
+    setActionBusyId(id);
+    const res = await action();
+    setActionBusyId(null);
+    if (res.ok) {
+      toast.success(successMsg);
+    } else {
+      toast.error(res.error ?? "Action failed");
+    }
+  };
+
+  const doCancel = async (params: { reason: string; refundType: "full" | "partial" | "none"; refundAmountPaise?: number; refundReference?: string }) => {
+    if (!cancelBookingObj || !onCancel) return;
+    setDialogBusy(true);
+    const res = await onCancel(
+      cancelBookingObj.id,
+      params.reason,
+      params.refundType,
+      params.refundAmountPaise,
+      params.refundReference
+    );
+    setDialogBusy(false);
+    if (res.ok) {
+      toast.success("Booking cancelled successfully.");
+      setCancelBookingObj(null);
+    } else {
+      toast.error(res.error ?? "Failed to cancel");
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <CancellationDialog
+        open={!!cancelBookingObj}
+        booking={cancelBookingObj}
+        isLoading={dialogBusy}
+        onClose={() => setCancelBookingObj(null)}
+        onConfirm={doCancel}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total bookings" value={stats.total} />
         <StatCard label="In-house (desk)" value={stats.inHouse} tone="text-champagne-dark" />
@@ -148,6 +195,7 @@ export function BookingList({
         <div className="space-y-3">
           {filtered.map((booking) => {
             const expanded = expandedId === booking.id;
+            const isBusy = actionBusyId === booking.id;
 
             return (
               <article
@@ -177,11 +225,7 @@ export function BookingList({
                         )}
                       </div>
                       <p className="text-[11px] font-mono text-muted">{booking.reference}</p>
-                      {booking.memberId && (
-                        <p className="text-[10px] font-semibold text-champagne">
-                          {booking.memberId}
-                        </p>
-                      )}
+                      <p className="text-[10px] text-muted">{booking.guestPhone}</p>
                     </div>
                   </div>
 
@@ -194,7 +238,7 @@ export function BookingList({
                       {booking.nights} night(s) · {booking.roomType}
                       {booking.roomNumber ? ` · Room ${booking.roomNumber}` : ""}
                     </p>
-                    <Badge className={cn("ml-5 text-[9px]", GUEST_TYPE_COLORS[booking.guestType])}>
+                    <Badge className={cn("ml-5 text-[9px]", GUEST_TYPE_COLORS[booking.guestType] || "bg-slate-100 text-slate-700")}>
                       {booking.guestTypeLabel}
                     </Badge>
                   </div>
@@ -202,19 +246,19 @@ export function BookingList({
                   <div className="flex flex-wrap items-center gap-2">
                     <div>
                       <p className="font-mono font-bold text-charcoal">
-                        {formatCurrency(booking.total)}
+                        {booking.finalAmountDisplay || formatCurrency(booking.finalAmountPaise / 100)}
                       </p>
                       <Badge
                         className={cn(
                           "mt-0.5 text-[9px]",
-                          PAYMENT_STATUS_COLORS[booking.paymentStatus]
+                          PAYMENT_STATUS_COLORS[booking.paymentStatus] || "bg-slate-100 text-slate-700"
                         )}
                       >
                         {booking.paymentStatus.replace("_", " ")}
                       </Badge>
                     </div>
                     <Badge
-                      className={cn("text-[9px]", BOOKING_STATUS_COLORS[booking.bookingStatus])}
+                      className={cn("text-[9px]", BOOKING_STATUS_COLORS[booking.bookingStatus] || "bg-slate-100 text-slate-700")}
                     >
                       {booking.bookingStatus.replace("_", " ")}
                     </Badge>
@@ -235,30 +279,50 @@ export function BookingList({
                         <ChevronDown className="h-3.5 w-3.5" />
                       )}
                     </Button>
-                    {booking.paymentStatus === "pending" && onRecordCash && (
+                    
+                    {/* Record Cash Button */}
+                    {(booking.paymentStatus === "unpaid" || booking.paymentStatus === "partial") && onRecordCash && booking.bookingStatus !== "cancelled" && (
                       <Button
                         variant="gold"
                         size="sm"
+                        disabled={isBusy}
                         className="text-[10px] px-2"
-                        onClick={() => void onRecordCash(booking.id)}
+                        onClick={() => handleAction(booking.id, () => onRecordCash(booking.id), "Cash payment recorded.")}
                       >
                         Record cash
                       </Button>
                     )}
-                    {booking.paymentStatus === "paid" &&
-                      booking.bookingStatus !== "cancelled" &&
-                      onRefund && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-[10px] px-2"
-                          onClick={() => void onRefund(booking.id)}
-                        >
-                          Refund
-                        </Button>
-                      )}
+
+                    {/* Check In Button directly accessible from row */}
+                    {booking.bookingStatus === "confirmed" && booking.paymentStatus === "paid" && onStatusChange && (
+                       <Button
+                         variant="default"
+                         size="sm"
+                         disabled={isBusy}
+                         className="text-[10px] px-2"
+                         onClick={() => handleAction(booking.id, () => onStatusChange(booking.id, "checked_in"), "Guest checked in.")}
+                       >
+                         Check in
+                       </Button>
+                    )}
+
                     {onStatusChange && (
-                      <StatusMenu booking={booking} onStatusChange={onStatusChange} />
+                      <StatusMenu
+                        booking={booking}
+                        disabled={isBusy}
+                        onStatusChange={async (status) => {
+                           if (status === "cancelled") {
+                             setCancelBookingObj(booking);
+                           } else if (status === "no_show") {
+                             const reason = window.prompt("Reason for no-show:", "Guest did not arrive");
+                             if (reason) {
+                               await handleAction(booking.id, () => onStatusChange(booking.id, status, reason), "Marked as no-show.");
+                             }
+                           } else {
+                             await handleAction(booking.id, () => onStatusChange(booking.id, status), "Status updated.");
+                           }
+                        }}
+                      />
                     )}
                   </div>
                 </div>
@@ -299,10 +363,12 @@ function StatCard({
 
 function StatusMenu({
   booking,
+  disabled,
   onStatusChange,
 }: {
   booking: ManagerBooking;
-  onStatusChange: (id: string, status: ManagerBooking["bookingStatus"]) => void;
+  disabled?: boolean;
+  onStatusChange: (status: ManagerBooking["bookingStatus"]) => void;
 }) {
   const nextActions: { label: string; status: ManagerBooking["bookingStatus"] }[] = [];
 
@@ -312,9 +378,6 @@ function StatusMenu({
   ) {
     nextActions.push({ label: "Confirm", status: "confirmed" });
   }
-  if (booking.bookingStatus === "confirmed") {
-    nextActions.push({ label: "Check in", status: "checked_in" });
-  }
   if (booking.bookingStatus === "checked_in") {
     nextActions.push({ label: "Check out", status: "checked_out" });
   }
@@ -322,6 +385,7 @@ function StatusMenu({
     booking.bookingStatus !== "cancelled" &&
     booking.bookingStatus !== "checked_out"
   ) {
+    nextActions.push({ label: "No-show", status: "no_show" });
     nextActions.push({ label: "Cancel", status: "cancelled" });
   }
 
@@ -334,8 +398,9 @@ function StatusMenu({
           key={action.status + action.label}
           variant={action.label === "Cancel" ? "outline" : "gold"}
           size="sm"
+          disabled={disabled}
           className="text-[10px] px-2"
-          onClick={() => onStatusChange(booking.id, action.status)}
+          onClick={() => onStatusChange(action.status)}
         >
           {action.label}
         </Button>
@@ -357,24 +422,11 @@ function BookingExpandedDetail({
   const [newCheckOut, setNewCheckOut] = useState(booking.checkOut);
   const [extendBusy, setExtendBusy] = useState(false);
   const [extendError, setExtendError] = useState<string | null>(null);
+  const toast = useToast();
 
   const canExtendCheckout =
     onExtendCheckout &&
     (booking.bookingStatus === "checked_in" || booking.bookingStatus === "confirmed");
-
-  const lineItems = [
-    { label: "Room charges", amount: booking.subtotal },
-    ...(booking.tierDiscount > 0
-      ? [{ label: "Tier discount", amount: -booking.tierDiscount }]
-      : []),
-    ...(booking.couponDiscount > 0
-      ? [{ label: "Coupon / promo", amount: -booking.couponDiscount }]
-      : []),
-    ...(booking.walletApplied > 0
-      ? [{ label: "Wallet applied", amount: -booking.walletApplied }]
-      : []),
-    ...(booking.taxes > 0 ? [{ label: "Taxes & fees", amount: booking.taxes }] : []),
-  ];
 
   return (
     <div className="space-y-5">
@@ -389,7 +441,6 @@ function BookingExpandedDetail({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
             <Detail label="Name" value={booking.guestName} />
             <Detail label="Phone" value={booking.guestPhone || "—"} />
-            <Detail label="Email" value={booking.guestEmail} />
             <Detail label="Guests" value={String(booking.guestCount ?? 1)} />
             <Detail label="Source" value={sourceLabel(booking)} />
             <Detail label="Booked on" value={formatDateTime(booking.createdAt)} />
@@ -400,13 +451,6 @@ function BookingExpandedDetail({
               value={`${formatDate(booking.checkIn)} → ${formatDate(booking.checkOut)} (${booking.nights}n)`}
               className="col-span-2"
             />
-            {booking.specialRequests && (
-              <Detail
-                label="Requests"
-                value={booking.specialRequests}
-                className="col-span-2"
-              />
-            )}
             {booking.notes && !booking.notes.startsWith("[In-house") && (
               <Detail label="Notes" value={booking.notes} className="col-span-2" />
             )}
@@ -421,24 +465,24 @@ function BookingExpandedDetail({
             </h3>
           </div>
           <div className="space-y-2 text-xs">
-            {lineItems.map((row) => (
-              <div key={row.label} className="flex justify-between gap-4">
-                <span className="text-muted">{row.label}</span>
-                <span
-                  className={cn(
-                    "font-mono font-semibold tabular-nums",
-                    row.amount < 0 ? "text-emerald-700" : "text-charcoal"
-                  )}
-                >
-                  {row.amount < 0 ? "−" : ""}
-                  {formatCurrency(Math.abs(row.amount))}
+            <div className="flex justify-between gap-4">
+              <span className="text-muted">Base amount</span>
+              <span className="font-mono font-semibold text-charcoal tabular-nums">
+                {booking.baseAmountDisplay || formatCurrency(booking.baseAmountPaise / 100)}
+              </span>
+            </div>
+            {booking.discountAmountPaise > 0 && (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted">Discount</span>
+                <span className="font-mono font-semibold text-emerald-700 tabular-nums">
+                  −{booking.discountDisplay || formatCurrency(booking.discountAmountPaise / 100)}
                 </span>
               </div>
-            ))}
+            )}
             <div className="border-t border-beige/50 pt-2 mt-2 flex justify-between gap-4">
-              <span className="font-bold text-charcoal">Total amount</span>
+              <span className="font-bold text-charcoal">Final amount</span>
               <span className="font-mono text-base font-bold text-charcoal tabular-nums">
-                {booking.finalAmountDisplay ?? formatCurrency(booking.total)}
+                {booking.finalAmountDisplay || formatCurrency(booking.finalAmountPaise / 100)}
               </span>
             </div>
           </div>
@@ -456,24 +500,22 @@ function BookingExpandedDetail({
               <Detail label="Paid at" value={formatDateTime(booking.paymentPaidAt)} />
             )}
           </dl>
+          
+          {(booking.bookingStatus === "cancelled" || booking.refundAmount > 0) && (
+             <dl className="mt-4 grid grid-cols-2 gap-3 text-xs border-t border-beige/40 pt-3">
+                {booking.cancellationReason && (
+                   <Detail label="Cancel Reason" value={booking.cancellationReason} className="col-span-2" />
+                )}
+                {booking.refundAmount > 0 && (
+                   <Detail label="Refund Amount" value={formatCurrency(booking.refundAmount / 100)} mono className="text-rose-700" />
+                )}
+                {booking.refundReference && (
+                   <Detail label="Refund Ref" value={booking.refundReference} mono />
+                )}
+             </dl>
+          )}
         </section>
       </div>
-
-      {booking.appliedCoupons.length > 0 && (
-        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50 p-3">
-          <p className="text-[10px] font-bold uppercase text-emerald-800 mb-2">
-            Benefits applied
-          </p>
-          <div className="space-y-1">
-            {booking.appliedCoupons.map((c) => (
-              <p key={c.code} className="text-xs text-emerald-900">
-                {c.name}: −{formatCurrency(c.amountDeducted)}{" "}
-                <span className="text-emerald-700/70">({c.redeemedAt})</span>
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
 
       {canExtendCheckout && (
         <section className="rounded-xl border border-champagne/30 bg-champagne/5 p-4">
@@ -509,6 +551,8 @@ function BookingExpandedDetail({
                 setExtendBusy(false);
                 if (!result.ok) {
                   setExtendError(result.error ?? "Could not extend stay.");
+                } else {
+                  toast.success("Stay extended successfully.");
                 }
               }}
             >
@@ -553,11 +597,9 @@ function Detail({
 /** @deprecated Use BookingList — kept for compact embeds */
 export function BookingTable({
   bookings,
-  onStatusChange,
   compact,
 }: {
   bookings: ManagerBooking[];
-  onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"]) => void;
   compact?: boolean;
 }) {
   if (compact) {
@@ -578,7 +620,7 @@ export function BookingTable({
                 <td className="py-2 px-3 text-xs text-muted">
                   {formatDate(b.checkIn)} – {formatDate(b.checkOut)}
                 </td>
-                <td className="py-2 px-3 font-mono">{formatCurrency(b.total)}</td>
+                <td className="py-2 px-3 font-mono">{b.finalAmountDisplay || formatCurrency(b.finalAmountPaise / 100)}</td>
               </tr>
             ))}
           </tbody>
@@ -587,7 +629,7 @@ export function BookingTable({
     );
   }
 
-  return <BookingList bookings={bookings} onStatusChange={onStatusChange} />;
+  return <BookingList bookings={bookings} />;
 }
 
 export function BookingDetailCard({ booking }: { booking: ManagerBooking }) {

@@ -3,11 +3,9 @@
 import { useMemo } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
-import { formatCurrency } from "@/lib/utils";
-import { PAYMENT_STATUS_COLORS } from "@/lib/utils";
+import { formatCurrency, PAYMENT_STATUS_COLORS, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
-import { cn } from "@/lib/utils";
 
 export default function PaymentsPage() {
   const { hotelId } = useHotelScope();
@@ -16,16 +14,14 @@ export default function PaymentsPage() {
 
   const summary = useMemo(() => {
     const paid = filtered.filter((b) => b.paymentStatus === "paid");
-    const pending = filtered.filter((b) => b.paymentStatus === "pending");
+    const pending = filtered.filter((b) => b.paymentStatus === "unpaid" || b.paymentStatus === "partial");
     const free = filtered.filter((b) => b.paymentStatus === "free_stay");
     return {
-      collected: paid.reduce((s, b) => s + b.total, 0),
-      pending: pending.reduce((s, b) => s + b.total, 0),
-      donorValue: filtered.reduce(
-        (s, b) => s + b.tierDiscount + b.couponDiscount + b.walletApplied,
-        0
-      ),
+      collected: paid.reduce((s, b) => s + (b.finalAmountPaise / 100), 0),
+      pending: pending.reduce((s, b) => s + (b.finalAmountPaise / 100), 0),
+      discountsApplied: filtered.reduce((s, b) => s + (b.discountAmountPaise / 100), 0),
       freeNights: free.length,
+      refundsProcessing: filtered.filter(b => b.paymentStatus === "refund_pending").length,
     };
   }, [filtered]);
 
@@ -33,10 +29,10 @@ export default function PaymentsPage() {
     <>
       <DashboardHeader
         title="Payments"
-        subtitle="UPI, card, free stays, and transparent coupon deduction logs"
+        subtitle="Cash receipts, tracking, and refunds"
       />
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="stat-card">
             <p className="text-[10px] font-bold uppercase text-muted">Collected</p>
             <p className="font-display text-xl font-bold text-emerald-700">
@@ -50,14 +46,18 @@ export default function PaymentsPage() {
             </p>
           </div>
           <div className="stat-card">
-            <p className="text-[10px] font-bold uppercase text-muted">Donor benefits applied</p>
+            <p className="text-[10px] font-bold uppercase text-muted">Discounts applied</p>
             <p className="font-display text-xl font-bold text-champagne-dark">
-              {formatCurrency(summary.donorValue)}
+              {formatCurrency(summary.discountsApplied)}
             </p>
           </div>
           <div className="stat-card">
             <p className="text-[10px] font-bold uppercase text-muted">Free stays</p>
             <p className="font-display text-xl font-bold">{summary.freeNights}</p>
+          </div>
+          <div className="stat-card">
+            <p className="text-[10px] font-bold uppercase text-muted">Refunds pending</p>
+            <p className="font-display text-xl font-bold text-violet-700">{summary.refundsProcessing}</p>
           </div>
         </div>
 
@@ -67,9 +67,9 @@ export default function PaymentsPage() {
               <tr className="border-b border-beige/50 text-left text-[10px] font-bold uppercase text-muted">
                 <th className="p-3">Reference</th>
                 <th className="p-3">Guest</th>
-                <th className="p-3">Subtotal</th>
-                <th className="p-3">Deductions</th>
-                <th className="p-3">Total</th>
+                <th className="p-3">Base amount</th>
+                <th className="p-3">Discount</th>
+                <th className="p-3">Final amount</th>
                 <th className="p-3">Status</th>
               </tr>
             </thead>
@@ -78,14 +78,14 @@ export default function PaymentsPage() {
                 <tr key={b.id} className="border-b border-beige/30">
                   <td className="p-3 font-mono text-xs">{b.reference}</td>
                   <td className="p-3">{b.guestName}</td>
-                  <td className="p-3 font-mono">{formatCurrency(b.subtotal)}</td>
+                  <td className="p-3 font-mono">{b.baseAmountDisplay || formatCurrency(b.baseAmountPaise / 100)}</td>
                   <td className="p-3 text-xs text-emerald-700">
-                    −{formatCurrency(b.tierDiscount + b.couponDiscount + b.walletApplied)}
+                    {b.discountAmountPaise > 0 ? `−${b.discountDisplay || formatCurrency(b.discountAmountPaise / 100)}` : "—"}
                   </td>
-                  <td className="p-3 font-mono font-bold">{formatCurrency(b.total)}</td>
+                  <td className="p-3 font-mono font-bold">{b.finalAmountDisplay || formatCurrency(b.finalAmountPaise / 100)}</td>
                   <td className="p-3">
-                    <Badge className={cn(PAYMENT_STATUS_COLORS[b.paymentStatus])}>
-                      {b.paymentStatus}
+                    <Badge className={cn(PAYMENT_STATUS_COLORS[b.paymentStatus] || "bg-slate-100 text-slate-700")}>
+                      {b.paymentStatus.replace("_", " ")}
                     </Badge>
                   </td>
                 </tr>

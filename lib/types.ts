@@ -13,9 +13,17 @@ export type BookingStatus =
   | "confirmed"
   | "checked_in"
   | "checked_out"
-  | "cancelled";
+  | "cancelled"
+  | "no_show";
 
-export type PaymentStatus = "paid" | "partial" | "pending" | "refunded" | "free_stay";
+export type PaymentStatus =
+  | "paid"
+  | "partial"
+  | "unpaid"
+  | "refund_pending"
+  | "refunded"
+  | "partially_refunded"
+  | "free_stay";
 
 export type RoomStatus = "available" | "occupied" | "blocked" | "maintenance";
 
@@ -50,40 +58,50 @@ export interface ManagerBooking {
   hotelId: string;
   hotelName: string;
   guestName: string;
-  guestEmail: string;
   guestPhone: string;
-  memberId?: string;
   guestType: GuestType;
   guestTypeLabel: string;
-  donorTier?: string;
   roomType: string;
   roomNumber?: string;
+  roomId?: string;
   checkIn: string;
   checkOut: string;
   nights: number;
-  subtotal: number;
-  tierDiscount: number;
-  couponDiscount: number;
-  walletApplied: number;
-  taxes: number;
-  total: number;
+  guestCount: number;
+  // Pricing (paise)
+  baseAmountPaise: number;
+  discountAmountPaise: number;
+  finalAmountPaise: number;
+  // Pricing (display strings from backend)
+  baseAmountDisplay?: string;
+  discountDisplay?: string;
+  finalAmountDisplay?: string;
   paymentStatus: PaymentStatus;
   bookingStatus: BookingStatus;
   qrCode: string;
-  specialRequests?: string;
   source: "website" | "walk_in" | "phone" | "donor_portal" | "in_house";
-  appliedCoupons: AppliedCouponLog[];
   isVip: boolean;
   isInHouse: boolean;
-  roomId?: string;
-  guestCount?: number;
   notes?: string;
   paymentReference?: string;
   paymentGateway?: string;
   paymentPaidAt?: string;
-  baseAmountDisplay?: string;
-  discountDisplay?: string;
-  finalAmountDisplay?: string;
+  // Cancellation
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelInitiatedByRole?: string;
+  // Refund tracking
+  refundAmount: number;
+  refundReference?: string;
+  refundProcessedAt?: string;
+  refundReason?: string;
+  refundRequestedAt?: string;
+  refundRequestedReason?: string;
+  // Computed helpers
+  isCancellableByGuest: boolean;
+  needsRefundApproval: boolean;
+  /** Number of coupons applied (from API `coupons_applied`). */
+  couponCount: number;
   createdAt: string;
 }
 

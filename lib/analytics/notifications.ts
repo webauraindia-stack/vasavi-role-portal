@@ -13,7 +13,7 @@ export function notificationsFromBookings(
     let title = "New booking";
     let priority: ManagerNotification["priority"] = "medium";
 
-    if (b.paymentStatus === "pending") {
+    if (b.paymentStatus === "unpaid" || b.paymentStatus === "partial") {
       type = "payment_pending";
       title = "Payment pending";
       priority = "high";

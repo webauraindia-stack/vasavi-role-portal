@@ -10,19 +10,31 @@ import { useManagerStore } from "@/stores/manager-store";
  */
 export function PortalDataSync() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const sessionPhase = useAuthStore((s) => s.sessionPhase);
+  const withAccessToken = useAuthStore((s) => s.withAccessToken);
   const user = useAuthStore((s) => s.user);
   const refreshFromApi = useManagerStore((s) => s.refreshFromApi);
   const loadDonors = useAdminStore((s) => s.loadDonors);
+
   useEffect(() => {
-    if (!isAuthenticated || !accessToken) return;
+    if (!isAuthenticated || sessionPhase !== "active") return;
 
-    void refreshFromApi(accessToken);
-
-    if (user?.role === "super_admin") {
-      void loadDonors(accessToken, { force: true });
-    }
-  }, [isAuthenticated, accessToken, user?.role, refreshFromApi, loadDonors]);
+    void withAccessToken(async (token) => {
+      await refreshFromApi(token);
+      if (user?.role === "super_admin") {
+        await loadDonors(token, { force: true });
+      }
+    }).catch(() => {
+      /* SessionExpiredError — portal shell redirects to login */
+    });
+  }, [
+    isAuthenticated,
+    sessionPhase,
+    user?.role,
+    withAccessToken,
+    refreshFromApi,
+    loadDonors,
+  ]);
 
   return null;
 }
