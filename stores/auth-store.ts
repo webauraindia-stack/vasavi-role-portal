@@ -2,12 +2,8 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import {
-  canAccessPath,
-  hasPermission,
-  type Permission,
-  type PortalUser,
-} from "@/lib/rbac";
+import { hasPermission, type Permission, type PortalUser } from "@/lib/rbac";
+import { canAccessPath } from "@/lib/access";
 import { signOutStaff } from "@/lib/auth/sign-out-staff";
 import { fetchStaffMe, verifyStaffOtp, sendStaffOtp } from "@/lib/api/staff-auth";
 import { isJwtExpired } from "@/lib/auth/jwt";
@@ -118,10 +114,12 @@ export const useAuthStore = create<AuthState>()(
             sessionPhase: "active",
             allowSessionRestore: true,
           });
-          if (user.hotelId) {
-            useManagerStore.getState().setHotelId(user.hotelId);
+          if (user.role === "admin") {
+            useManagerStore.getState().setHotelId(user.hotelId ?? "");
+          } else if (user.role === "super_admin") {
+            useManagerStore.getState().setHotelId("all");
           }
-          await useManagerStore.getState().refreshFromApi(data.access);
+          await useManagerStore.getState().refreshFromApi(data.access, user);
           return { ok: true };
         } catch (err) {
           return {
@@ -226,10 +224,12 @@ export const useAuthStore = create<AuthState>()(
             sessionPhase: "active",
             allowSessionRestore: true,
           });
-          if (user.hotelId) {
-            useManagerStore.getState().setHotelId(user.hotelId);
+          if (user.role === "admin") {
+            useManagerStore.getState().setHotelId(user.hotelId ?? "");
+          } else if (user.role === "super_admin") {
+            useManagerStore.getState().setHotelId("all");
           }
-          await useManagerStore.getState().refreshFromApi(token);
+          await useManagerStore.getState().refreshFromApi(token, user);
           if (user.role === "super_admin") {
             await useAdminStore.getState().loadDonors(token, { force: true });
           }
@@ -272,8 +272,8 @@ export const useAuthStore = create<AuthState>()(
 
       canAccess: (pathname) => {
         const user = get().user;
-        const perms = user?.permissions ?? [];
-        return canAccessPath(pathname, perms, { hotelId: user?.hotelId });
+        if (!user) return false;
+        return canAccessPath(pathname, user);
       },
     }),
     {

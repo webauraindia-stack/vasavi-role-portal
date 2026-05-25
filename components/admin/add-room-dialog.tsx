@@ -18,12 +18,15 @@ export function AddRoomDialog({
   open,
   onClose,
   branchId,
+  onRoomCreated,
 }: {
   open: boolean;
   onClose: () => void;
   branchId: string;
+  onRoomCreated?: () => void | Promise<void>;
 }) {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const refreshFromApi = useManagerStore((s) => s.refreshFromApi);
 
   const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([]);
@@ -114,7 +117,11 @@ export function AddRoomDialog({
         });
       }
 
-      await refreshFromApi(accessToken);
+      if (onRoomCreated) {
+        await onRoomCreated();
+      } else {
+        await refreshFromApi(accessToken, user);
+      }
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create room.");
@@ -303,7 +310,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function AddRoomTrigger({ branchId }: { branchId: string }) {
+export function AddRoomTrigger({
+  branchId,
+  onRoomCreated,
+}: {
+  branchId: string;
+  onRoomCreated?: () => void | Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -312,7 +325,12 @@ export function AddRoomTrigger({ branchId }: { branchId: string }) {
         <Plus className="h-3.5 w-3.5" />
         Add room
       </Button>
-      <AddRoomDialog open={open} onClose={() => setOpen(false)} branchId={branchId} />
+      <AddRoomDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        branchId={branchId}
+        onRoomCreated={onRoomCreated}
+      />
     </Can>
   );
 }

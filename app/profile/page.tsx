@@ -207,7 +207,7 @@ export default function ProfilePage() {
 
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
-            href={navForUser(user.permissions)[0]?.href ?? "/dashboard"}
+            href={navForUser(user.permissions)[0]?.href ?? "/branch"}
             className="inline-flex h-10 items-center justify-center rounded-lg border border-beige bg-white px-4 text-sm font-bold text-charcoal hover:bg-surface"
           >
             Back to workspace

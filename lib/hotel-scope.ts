@@ -26,3 +26,17 @@ export function getHotelLabel(hotelId: string, branches: ManagerHotel[]): string
 export function getHotelName(hotelId: string, branches: ManagerHotel[]): string {
   return branches.find((h) => h.id === hotelId)?.name ?? "Your property";
 }
+
+/** Branch id sent to the API — prefer useDataScope().branchIdForApi in new code. */
+export function branchIdForApi(
+  user: PortalUser | null | undefined,
+  storedHotelId: string
+): string | undefined {
+  if (isHotelScopedAdmin(user)) {
+    return user?.hotelId;
+  }
+  if (canViewAllHotels(user)) {
+    return storedHotelId !== "all" ? storedHotelId : undefined;
+  }
+  return undefined;
+}

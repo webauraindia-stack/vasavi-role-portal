@@ -5,17 +5,14 @@ import Image from "next/image";
 import { Ban, Check, Loader2, RotateCcw, Search, Wrench } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { AddRoomTrigger } from "@/components/admin/add-room-dialog";
-import { useAuthStore } from "@/stores/auth-store";
+import { useAuthStore, useAuthUser } from "@/stores/auth-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { fetchBranchRoomInventory } from "@/lib/api/branch-rooms";
 import { ROOM_STATUS_COLORS, formatCurrency } from "@/lib/utils";
-import type { RoomInventory, RoomStatus } from "@/lib/types";
-import {
-  useManagerStore,
-  getStoreBookings,
-  getStoreRooms,
-} from "@/stores/manager-store";
+import type { ManagerBooking, RoomInventory, RoomStatus } from "@/lib/types";
+import { useManagerStore, getStoreBookings } from "@/stores/manager-store";
 import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS: { value: RoomStatus | "all"; label: string }[] = [
@@ -35,9 +32,15 @@ export function BranchRoomsPanel({
   minimal?: boolean;
 }) {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const { rooms, bookings, updateRoomOperationalStatus, refreshFromApi } =
-    useManagerStore();
+  const user = useAuthUser();
+  const storedHotelId = useManagerStore((s) => s.hotelId);
+  const updateRoomOperationalStatus = useManagerStore((s) => s.updateRoomOperationalStatus);
   const toast = useToast();
+
+  const [rooms, setRooms] = useState<RoomInventory[]>([]);
+  const [bookings, setBookings] = useState<ManagerBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
@@ -45,31 +48,47 @@ export function BranchRoomsPanel({
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [donorOnly, setDonorOnly] = useState(false);
 
-  const loadData = useCallback(() => {
-    if (accessToken) void refreshFromApi(accessToken);
-  }, [accessToken, refreshFromApi]);
+  const loadData = useCallback(async () => {
+    if (!accessToken || !branchId) return;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await fetchBranchRoomInventory(
+        accessToken,
+        branchId,
+        user,
+        storedHotelId
+      );
+      setRooms(data.rooms);
+      setBookings(data.bookings);
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "Could not load rooms for this property."
+      );
+      setRooms([]);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, branchId, user, storedHotelId]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
-  const scopedRooms = useMemo(
-    () => getStoreRooms(branchId, rooms),
-    [rooms, branchId]
-  );
   const scopedBookings = useMemo(
     () => getStoreBookings(branchId, bookings),
     [bookings, branchId]
   );
 
   const categories = useMemo(
-    () => [...new Set(scopedRooms.map((r) => r.category))].sort(),
-    [scopedRooms]
+    () => [...new Set(rooms.map((r) => r.category))].sort(),
+    [rooms]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return scopedRooms.filter((room) => {
+    return rooms.filter((room) => {
       if (statusFilter !== "all" && room.status !== statusFilter) return false;
       if (categoryFilter !== "all" && room.category !== categoryFilter) return false;
       if (donorOnly && !room.isDonorExclusive) return false;
@@ -80,7 +99,7 @@ export function BranchRoomsPanel({
         room.category.toLowerCase().includes(q)
       );
     });
-  }, [scopedRooms, search, statusFilter, categoryFilter, donorOnly]);
+  }, [rooms, search, statusFilter, categoryFilter, donorOnly]);
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -114,15 +133,38 @@ export function BranchRoomsPanel({
             ? "blocked"
             : "under maintenance";
       toast.success(`Room marked ${label}.`);
+      await loadData();
     } else {
       toast.error(res.error ?? "Could not update room status.");
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading rooms from server…
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {loadError}
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="ml-2 font-bold underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <AddRoomTrigger branchId={branchId} />
+        <AddRoomTrigger branchId={branchId} onRoomCreated={loadData} />
       </div>
 
       <div className="card-manager p-4 space-y-3">
@@ -182,14 +224,14 @@ export function BranchRoomsPanel({
         </div>
         {!minimal && (
           <p className="text-xs text-muted">
-            Showing {filtered.length} of {scopedRooms.length} rooms
+            Showing {filtered.length} of {rooms.length} rooms
           </p>
         )}
       </div>
 
       {filtered.length === 0 ? (
         <div className="card-manager p-8 text-center text-sm text-muted">
-          {scopedRooms.length === 0
+          {rooms.length === 0
             ? "No rooms yet. Use Add room to create your first room."
             : "No rooms match your filters."}{" "}
           {hasActiveFilters && (
@@ -207,111 +249,99 @@ export function BranchRoomsPanel({
           {filtered.map((room) => {
             const booking = scopedBookings.find(
               (b) =>
-                b.roomNumber === room.number &&
-                (b.bookingStatus === "checked_in" || b.bookingStatus === "confirmed")
+                (b.bookingStatus === "checked_in" || b.bookingStatus === "confirmed") &&
+                (b.roomId === room.id || b.roomNumber === room.number)
             );
+
             return (
-              <div
+              <article
                 key={room.id}
-                className={cn(
-                  "card-manager overflow-hidden",
-                  room.status === "maintenance" && "border-rose-200/60",
-                  room.status === "blocked" && "border-amber-200/60"
-                )}
+                className="card-manager overflow-hidden flex flex-col"
               >
                 {room.imageUrl ? (
-                  <div className="relative h-36 w-full bg-surface">
+                  <div className="relative h-32 bg-surface">
                     <Image
                       src={room.imageUrl}
-                      alt={`Room ${room.number}`}
+                      alt={room.name}
                       fill
                       className="object-cover"
-                      unoptimized
+                      sizes="(max-width: 768px) 100vw, 33vw"
                     />
                   </div>
                 ) : (
-                  <div className="h-24 bg-surface flex items-center justify-center text-xs text-muted">
+                  <div className="h-24 bg-champagne/5 flex items-center justify-center text-xs text-muted">
                     No photo
                   </div>
                 )}
-                <div className="p-4">
-                  <div className="flex justify-between items-start gap-2">
+                <div className="p-4 flex-1 flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="font-display text-xl font-bold">Room {room.number}</p>
-                      <p className="text-sm text-muted">{room.category}</p>
-                      <p className="text-[10px] text-muted mt-0.5">
-                        Max {room.maxOccupancy} guests
-                        {room.basePricePerNight != null &&
-                          ` · ${formatCurrency(room.basePricePerNight)}/night`}
-                      </p>
+                      <p className="font-bold text-charcoal">Room {room.number}</p>
+                      <p className="text-xs text-muted">{room.category}</p>
                     </div>
-                    <Badge className={ROOM_STATUS_COLORS[room.status]}>{room.status}</Badge>
+                    <Badge
+                      className={cn(
+                        "text-[9px] shrink-0",
+                        ROOM_STATUS_COLORS[room.status]
+                      )}
+                    >
+                      {room.status}
+                    </Badge>
                   </div>
-
-                  {room.isDonorExclusive && (
-                    <span className="text-[10px] font-bold text-champagne-dark mt-2 inline-block">
-                      Donor exclusive
-                    </span>
-                  )}
-
-                  {room.description && (
-                    <p className="text-xs text-muted mt-2 line-clamp-2">{room.description}</p>
-                  )}
-
+                  <p className="text-xs text-muted">
+                    Sleeps {room.maxOccupancy} ·{" "}
+                    {formatCurrency(room.basePricePerNight ?? 0)}/night
+                    {room.isDonorExclusive && (
+                      <span className="ml-1 text-champagne-dark font-semibold">
+                        · Donor
+                      </span>
+                    )}
+                  </p>
                   {booking && (
-                    <p className="text-xs text-charcoal mt-2">
-                      Guest: <strong>{booking.guestName}</strong>
+                    <p className="text-[10px] text-blue-800 bg-blue-50 rounded px-2 py-1">
+                      Guest: {booking.guestName}
                     </p>
                   )}
-
-                  {room.status !== "occupied" && (
-                    <div className="flex gap-1 mt-3 flex-wrap">
-                      {room.operationalStatus !== "available" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={statusBusyId === room.id}
-                          onClick={() => void handleOperationalStatus(room.id, "available")}
-                        >
-                          {statusBusyId === room.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Check className="h-3 w-3" />
-                          )}{" "}
-                          Available
-                        </Button>
-                      )}
-                      {room.operationalStatus !== "blocked" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={statusBusyId === room.id}
-                          onClick={() => void handleOperationalStatus(room.id, "blocked")}
-                        >
-                          <Ban className="h-3 w-3" /> Block
-                        </Button>
-                      )}
-                      {room.operationalStatus !== "maintenance" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={statusBusyId === room.id}
-                          onClick={() =>
-                            void handleOperationalStatus(room.id, "maintenance")
-                          }
-                        >
-                          <Wrench className="h-3 w-3" /> Maintenance
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {room.status === "occupied" && (
-                    <p className="text-[10px] text-muted mt-2">
-                      Check the guest out before changing block or maintenance status.
-                    </p>
-                  )}
+                  <div className="mt-auto flex flex-wrap gap-1 pt-2">
+                    {room.operationalStatus !== "available" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] h-7 gap-1"
+                        disabled={statusBusyId === room.id}
+                        onClick={() => handleOperationalStatus(room.id, "available")}
+                      >
+                        <Check className="h-3 w-3" />
+                        Available
+                      </Button>
+                    )}
+                    {room.operationalStatus !== "blocked" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] h-7 gap-1"
+                        disabled={statusBusyId === room.id}
+                        onClick={() => handleOperationalStatus(room.id, "blocked")}
+                      >
+                        <Ban className="h-3 w-3" />
+                        Block
+                      </Button>
+                    )}
+                    {room.operationalStatus !== "maintenance" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] h-7 gap-1"
+                        disabled={statusBusyId === room.id}
+                        onClick={() => handleOperationalStatus(room.id, "maintenance")}
+                      >
+                        <Wrench className="h-3 w-3" />
+                        Maintenance
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>

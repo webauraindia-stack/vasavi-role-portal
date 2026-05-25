@@ -10,12 +10,15 @@ import type {
   RoomInventory,
   SupportTicket,
 } from "@/lib/types";
+import { friendlyBookingError } from "@/lib/booking/booking-errors";
 import {
   buildManualBooking,
   shouldMarkRoomOccupied,
   type ManualBookingInput,
 } from "@/lib/booking/manual-booking";
 import { notificationsFromBookings } from "@/lib/analytics/notifications";
+import { branchIdForApi } from "@/lib/hotel-scope";
+import type { PortalUser } from "@/lib/rbac";
 import { listManagerHotels } from "@/lib/api/branches";
 import {
   approveRefundRequestApi,
@@ -62,7 +65,11 @@ interface ManagerState {
   isRefreshing: boolean;
 
   setHotelId: (id: string) => void;
-  refreshFromApi: (accessToken: string) => Promise<void>;
+  refreshFromApi: (
+    accessToken: string,
+    authUser?: PortalUser | null,
+    scope?: { branchId?: string; hotelId?: string }
+  ) => Promise<void>;
 
   /** Update booking status: optimistic with server rollback on error. */
   updateBookingStatus: (
@@ -155,10 +162,7 @@ function _replaceBooking(bookings: ManagerBooking[], id: string, booking: Manage
 }
 
 function _extractError(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message.trim()) {
-    return err.message;
-  }
-  return fallback;
+  return friendlyBookingError(err, fallback);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +188,7 @@ export const useManagerStore = create<ManagerState>()(
       // Data loading
       // -----------------------------------------------------------------------
 
-      refreshFromApi: async (accessToken) => {
+      refreshFromApi: async (accessToken, authUser, scope) => {
         if (refreshInFlight) {
           await refreshInFlight;
           return;
@@ -193,9 +197,22 @@ export const useManagerStore = create<ManagerState>()(
         refreshInFlight = (async () => {
           set({ isRefreshing: true, dataError: null });
           try {
+            let staffUser = authUser;
+            if (staffUser === undefined) {
+              const { useAuthStore } = await import("@/stores/auth-store");
+              staffUser = useAuthStore.getState().user;
+            }
+            const branchFilter =
+              scope?.branchId !== undefined
+                ? scope.branchId
+                : branchIdForApi(staffUser, scope?.hotelId ?? get().hotelId);
+            if (scope?.hotelId !== undefined && staffUser?.role === "super_admin") {
+              set({ hotelId: scope.hotelId });
+            }
+
             const [branches, bookings] = await Promise.all([
               listManagerHotels(accessToken),
-              listBookings(accessToken),
+              listBookings(accessToken, branchFilter),
             ]);
 
             let donors: BackendDonorListItem[] = [];
@@ -205,8 +222,6 @@ export const useManagerStore = create<ManagerState>()(
               donors = [];
             }
 
-            const branchFilter =
-              get().hotelId !== "all" ? get().hotelId : undefined;
             const rooms = await listRoomInventory(accessToken, bookings, branchFilter);
             const notifications = notificationsFromBookings(bookings);
 

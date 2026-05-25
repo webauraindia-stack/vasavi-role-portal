@@ -16,7 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { BookingStatusControls } from "@/components/dashboard/booking-status-controls";
 import { CancellationDialog } from "@/components/dashboard/cancellation-dialog";
+import {
+  BOOKING_STATUS_LABELS,
+  canRecordCash,
+  statusUpdateSuccessMessage,
+} from "@/lib/booking/status-workflow";
 import type { ManagerBooking } from "@/lib/types";
 import {
   BOOKING_STATUS_COLORS,
@@ -111,15 +117,20 @@ export function BookingList({
     [bookings]
   );
 
-  const handleAction = async (id: string, action: () => Promise<{ ok: boolean; error?: string }>, successMsg: string) => {
+  const runAction = async (
+    id: string,
+    action: () => Promise<{ ok: boolean; error?: string }>,
+    successMsg: string
+  ) => {
     setActionBusyId(id);
     const res = await action();
     setActionBusyId(null);
-    if (res.ok) {
+    if (res.ok && successMsg) {
       toast.success(successMsg);
-    } else {
-      toast.error(res.error ?? "Action failed");
+    } else if (!res.ok) {
+      toast.error(res.error ?? "We could not complete that action. Please try again.");
     }
+    return res;
   };
 
   const doCancel = async (params: { reason: string; refundType: "full" | "partial" | "none"; refundAmountPaise?: number; refundReference?: string }) => {
@@ -137,7 +148,7 @@ export function BookingList({
       toast.success("Booking cancelled successfully.");
       setCancelBookingObj(null);
     } else {
-      toast.error(res.error ?? "Failed to cancel");
+      toast.error(res.error ?? "We could not cancel this booking. Check the message and try again.");
     }
   };
 
@@ -260,70 +271,61 @@ export function BookingList({
                     <Badge
                       className={cn("text-[9px]", BOOKING_STATUS_COLORS[booking.bookingStatus] || "bg-slate-100 text-slate-700")}
                     >
-                      {booking.bookingStatus.replace("_", " ")}
+                      {BOOKING_STATUS_LABELS[booking.bookingStatus]}
                     </Badge>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
+                    {canRecordCash(booking) && onRecordCash && (
+                      <Button
+                        variant="gold"
+                        size="sm"
+                        disabled={isBusy}
+                        className="text-[10px] px-2"
+                        title="Record payment received at the front desk"
+                        onClick={() =>
+                          runAction(
+                            booking.id,
+                            () => onRecordCash(booking.id),
+                            "Payment recorded. You can check the guest in when ready."
+                          )
+                        }
+                      >
+                        Record payment
+                      </Button>
+                    )}
+
+                    {onStatusChange && (
+                      <BookingStatusControls
+                        booking={booking}
+                        disabled={isBusy}
+                        onRequestCancel={() => setCancelBookingObj(booking)}
+                        onStatusChange={(status, reason) => {
+                          const from = booking.bookingStatus;
+                          return runAction(
+                            booking.id,
+                            () => onStatusChange(booking.id, status, reason),
+                            statusUpdateSuccessMessage(from, status)
+                          );
+                        }}
+                      />
+                    )}
+
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-1"
+                      className="gap-1 h-8 px-2"
+                      aria-expanded={expanded}
+                      aria-label={expanded ? "Hide booking details" : "View booking details"}
                       onClick={() => setExpandedId(expanded ? null : booking.id)}
                     >
                       <Eye className="h-3.5 w-3.5" />
-                      {expanded ? "Hide" : "Details"}
                       {expanded ? (
                         <ChevronUp className="h-3.5 w-3.5" />
                       ) : (
                         <ChevronDown className="h-3.5 w-3.5" />
                       )}
                     </Button>
-                    
-                    {/* Record Cash Button */}
-                    {(booking.paymentStatus === "unpaid" || booking.paymentStatus === "partial") && onRecordCash && booking.bookingStatus !== "cancelled" && (
-                      <Button
-                        variant="gold"
-                        size="sm"
-                        disabled={isBusy}
-                        className="text-[10px] px-2"
-                        onClick={() => handleAction(booking.id, () => onRecordCash(booking.id), "Cash payment recorded.")}
-                      >
-                        Record cash
-                      </Button>
-                    )}
-
-                    {/* Check In Button directly accessible from row */}
-                    {booking.bookingStatus === "confirmed" && booking.paymentStatus === "paid" && onStatusChange && (
-                       <Button
-                         variant="default"
-                         size="sm"
-                         disabled={isBusy}
-                         className="text-[10px] px-2"
-                         onClick={() => handleAction(booking.id, () => onStatusChange(booking.id, "checked_in"), "Guest checked in.")}
-                       >
-                         Check in
-                       </Button>
-                    )}
-
-                    {onStatusChange && (
-                      <StatusMenu
-                        booking={booking}
-                        disabled={isBusy}
-                        onStatusChange={async (status) => {
-                           if (status === "cancelled") {
-                             setCancelBookingObj(booking);
-                           } else if (status === "no_show") {
-                             const reason = window.prompt("Reason for no-show:", "Guest did not arrive");
-                             if (reason) {
-                               await handleAction(booking.id, () => onStatusChange(booking.id, status, reason), "Marked as no-show.");
-                             }
-                           } else {
-                             await handleAction(booking.id, () => onStatusChange(booking.id, status), "Status updated.");
-                           }
-                        }}
-                      />
-                    )}
                   </div>
                 </div>
 
@@ -357,54 +359,6 @@ function StatCard({
     <div className="card-manager p-4">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</p>
       <p className={cn("mt-1 text-2xl font-bold", tone)}>{value}</p>
-    </div>
-  );
-}
-
-function StatusMenu({
-  booking,
-  disabled,
-  onStatusChange,
-}: {
-  booking: ManagerBooking;
-  disabled?: boolean;
-  onStatusChange: (status: ManagerBooking["bookingStatus"]) => void;
-}) {
-  const nextActions: { label: string; status: ManagerBooking["bookingStatus"] }[] = [];
-
-  if (
-    booking.bookingStatus === "pending" &&
-    (booking.paymentStatus === "paid" || booking.paymentStatus === "free_stay")
-  ) {
-    nextActions.push({ label: "Confirm", status: "confirmed" });
-  }
-  if (booking.bookingStatus === "checked_in") {
-    nextActions.push({ label: "Check out", status: "checked_out" });
-  }
-  if (
-    booking.bookingStatus !== "cancelled" &&
-    booking.bookingStatus !== "checked_out"
-  ) {
-    nextActions.push({ label: "No-show", status: "no_show" });
-    nextActions.push({ label: "Cancel", status: "cancelled" });
-  }
-
-  if (nextActions.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-1">
-      {nextActions.map((action) => (
-        <Button
-          key={action.status + action.label}
-          variant={action.label === "Cancel" ? "outline" : "gold"}
-          size="sm"
-          disabled={disabled}
-          className="text-[10px] px-2"
-          onClick={() => onStatusChange(action.status)}
-        >
-          {action.label}
-        </Button>
-      ))}
     </div>
   );
 }
@@ -489,7 +443,7 @@ function BookingExpandedDetail({
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-xs border-t border-beige/40 pt-3">
             <Detail label="Payment status" value={booking.paymentStatus.replace("_", " ")} />
-            <Detail label="Booking status" value={booking.bookingStatus.replace("_", " ")} />
+            <Detail label="Booking status" value={BOOKING_STATUS_LABELS[booking.bookingStatus]} />
             {booking.paymentGateway && (
               <Detail label="Gateway" value={booking.paymentGateway} />
             )}
@@ -550,7 +504,7 @@ function BookingExpandedDetail({
                 const result = await onExtendCheckout(booking.id, newCheckOut);
                 setExtendBusy(false);
                 if (!result.ok) {
-                  setExtendError(result.error ?? "Could not extend stay.");
+                  setExtendError(result.error ?? "We could not extend this stay. Choose a later checkout date.");
                 } else {
                   toast.success("Stay extended successfully.");
                 }

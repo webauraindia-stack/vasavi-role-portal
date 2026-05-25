@@ -145,8 +145,19 @@ export function mapManagerBooking(b: BackendBooking): ManagerBooking {
 // API functions
 // ---------------------------------------------------------------------------
 
-export async function listBookings(accessToken: string): Promise<ManagerBooking[]> {
-  const rows = await fetchAllResults<BackendBooking>("bookings/", accessToken);
+function bookingsListPath(branchId?: string): string {
+  if (!branchId) return "bookings/";
+  return `bookings/?branch_id=${encodeURIComponent(branchId)}`;
+}
+
+export async function listBookings(
+  accessToken: string,
+  branchId?: string
+): Promise<ManagerBooking[]> {
+  const rows = await fetchAllResults<BackendBooking>(
+    bookingsListPath(branchId),
+    accessToken
+  );
   return rows.map(mapManagerBooking);
 }
 
@@ -174,11 +185,10 @@ export async function getBookingByReference(
     const match = rows.find((b) => b.booking_reference === normalized) ?? rows[0];
     if (match) return mapManagerBooking(match);
   } catch {
-    /* fall through */
+    return null;
   }
 
-  const all = await listBookings(accessToken);
-  return all.find((b) => b.reference === normalized) ?? null;
+  return null;
 }
 
 export async function extendBookingStay(

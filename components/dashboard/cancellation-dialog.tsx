@@ -59,7 +59,7 @@ export function CancellationDialog({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (reason.trim().length < 10) {
-      newErrors.reason = "Reason must be at least 10 characters.";
+      newErrors.reason = "Please describe why you are cancelling (at least 10 characters).";
     }
     if (isPaid && refundType === "partial") {
       const amt = parseFloat(partialAmount);

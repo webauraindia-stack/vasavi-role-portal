@@ -11,16 +11,15 @@ import {
   type FinanceAnalytics,
   type ReportsAnalytics,
 } from "@/lib/api/analytics";
+import { branchIdForApi } from "@/lib/hotel-scope";
 import { useAuthStore } from "@/stores/auth-store";
 import { useManagerStore } from "@/stores/manager-store";
 
-function branchParam(hotelId: string): string | undefined {
-  return hotelId === "all" ? undefined : hotelId;
-}
-
 export function useDashboardAnalytics() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const hotelId = useManagerStore((s) => s.hotelId);
+  const branchId = branchIdForApi(user, hotelId);
   const [data, setData] = useState<DashboardAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,14 +32,14 @@ export function useDashboardAnalytics() {
     setLoading(true);
     setError(null);
     try {
-      setData(await fetchDashboardAnalytics(accessToken, branchParam(hotelId)));
+      setData(await fetchDashboardAnalytics(accessToken, branchId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load analytics.");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [accessToken, hotelId]);
+  }, [accessToken, branchId]);
 
   useEffect(() => {
     void reload();
@@ -51,7 +50,9 @@ export function useDashboardAnalytics() {
 
 export function useReportsAnalytics() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const hotelId = useManagerStore((s) => s.hotelId);
+  const branchId = branchIdForApi(user, hotelId);
   const [data, setData] = useState<ReportsAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,14 +65,14 @@ export function useReportsAnalytics() {
     setLoading(true);
     setError(null);
     try {
-      setData(await fetchReportsAnalytics(accessToken, branchParam(hotelId)));
+      setData(await fetchReportsAnalytics(accessToken, branchId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load analytics.");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [accessToken, hotelId]);
+  }, [accessToken, branchId]);
 
   useEffect(() => {
     void reload();
@@ -82,7 +83,9 @@ export function useReportsAnalytics() {
 
 export function useFinanceAnalytics() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const hotelId = useManagerStore((s) => s.hotelId);
+  const branchId = branchIdForApi(user, hotelId);
   const [data, setData] = useState<FinanceAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,14 +98,14 @@ export function useFinanceAnalytics() {
     setLoading(true);
     setError(null);
     try {
-      setData(await fetchFinanceAnalytics(accessToken, branchParam(hotelId)));
+      setData(await fetchFinanceAnalytics(accessToken, branchId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load analytics.");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [accessToken, hotelId]);
+  }, [accessToken, branchId]);
 
   useEffect(() => {
     void reload();

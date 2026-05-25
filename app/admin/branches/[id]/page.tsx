@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, BedDouble, Building2, UserCog, Plus, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { PlatformModuleHeader } from "@/components/admin/platform-module-header";
+import { PlatformModuleHeader } from "@/components/platform/platform-module-header";
 import { BranchRoomsPanel } from "@/components/admin/branch-rooms-panel";
 import {
   listStaffAdmins,
@@ -15,6 +15,7 @@ import {
 import { listBranches, type BackendBranch } from "@/lib/api/branches";
 import { fetchStaffMe } from "@/lib/api/staff-auth";
 import { useAuthStore, useAuthUser } from "@/stores/auth-store";
+import { PLATFORM } from "@/lib/routes";
 import { hasPermission } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
@@ -99,7 +100,7 @@ export default function BranchDetailPage() {
   useEffect(() => {
     if (!user || !branchId) return;
     if (user.role === "admin" && user.hotelId && user.hotelId !== branchId) {
-      router.replace(`/admin/branches/${user.hotelId}`);
+      router.replace(`/platform/branches/${user.hotelId}`);
     }
   }, [user, branchId, router]);
 
@@ -168,7 +169,7 @@ export default function BranchDetailPage() {
       />
       <div className="mx-auto max-w-5xl space-y-6 p-6">
         <Link
-          href="/admin/branches"
+          href={PLATFORM.branches}
           className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-charcoal transition-colors"
         >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to branches

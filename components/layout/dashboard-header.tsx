@@ -17,6 +17,7 @@ export function DashboardHeader({
   hidePropertyBar?: boolean;
 }) {
   const { hotelId, viewAll, setHotelId, branches } = useHotelScope();
+  const user = useAuthStore((s) => s.user);
   const withAccessToken = useAuthStore((s) => s.withAccessToken);
   const notifications = useManagerStore((s) => s.notifications);
   const isRefreshing = useManagerStore((s) => s.isRefreshing);
@@ -57,7 +58,7 @@ export function DashboardHeader({
             className="gap-1.5"
             disabled={isRefreshing}
             onClick={() =>
-              void withAccessToken((token) => refreshFromApi(token)).catch(() => {})
+              void withAccessToken((token) => refreshFromApi(token, user)).catch(() => {})
             }
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />

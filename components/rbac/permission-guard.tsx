@@ -3,6 +3,7 @@
 import { ShieldOff } from "lucide-react";
 import Link from "next/link";
 import { hasAnyPermission, hasPermission, type Permission } from "@/lib/rbac";
+import { BRANCH } from "@/lib/routes";
 import { useUserPermissions } from "@/stores/auth-store";
 
 export function PermissionGuard({
@@ -33,7 +34,7 @@ export function PermissionGuard({
         Your role does not include permission for this module.
       </p>
       <Link
-        href="/dashboard"
+        href={BRANCH.home}
         className="mt-4 text-sm font-medium text-champagne hover:underline"
       >
         Back to dashboard

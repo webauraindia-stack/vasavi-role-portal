@@ -6,7 +6,7 @@ import { ShieldCheck, MessageCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/stores/auth-store";
-import { defaultLandingPath } from "@/lib/rbac";
+import { homePathForUser, resolveLegacyRedirect } from "@/lib/routes";
 
 function LoginForm() {
   const router = useRouter();
@@ -58,10 +58,14 @@ function LoginForm() {
     }
     const account = useAuthStore.getState().user;
     const from = searchParams.get("from");
-    const fallback = account ? defaultLandingPath(account.permissions) : "/dashboard";
+    const legacyFrom = from ? resolveLegacyRedirect(from, account?.role) : null;
+    const resolvedFrom = legacyFrom ?? from;
+    const fallback = account ? homePathForUser(account) : "/login";
     const target =
-      from && from !== "/login" && useAuthStore.getState().canAccess(from)
-        ? from
+      resolvedFrom &&
+      resolvedFrom !== "/login" &&
+      useAuthStore.getState().canAccess(resolvedFrom)
+        ? resolvedFrom
         : fallback;
     router.push(target);
   };

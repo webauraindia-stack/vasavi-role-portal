@@ -31,8 +31,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    const allBookings = await listBookings(token);
-    const rooms = await listRoomInventory(token, allBookings);
+    const allBookings = await listBookings(token, booking.hotelId || undefined);
+    const rooms = await listRoomInventory(
+      token,
+      allBookings,
+      booking.hotelId || undefined
+    );
 
     const extensionBooking = managerBookingToExtensionContext(booking);
 
