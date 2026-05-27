@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, MessageCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhoneField, toBackendPhone, isValidIndianMobile } from "@/lib/phone";
 import { useAuthStore } from "@/stores/auth-store";
 import { homePathForUser, resolveLegacyRedirect } from "@/lib/routes";
 
@@ -15,7 +17,8 @@ function LoginForm() {
   const loginWithOtp = useAuthStore((s) => s.loginWithOtp);
 
   const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [phone, setPhone] = useState("9876543210");
+  const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -32,8 +35,14 @@ function LoginForm() {
     e.preventDefault();
     setError("");
     setInfo("");
+    const validation = validatePhoneField(phone);
+    if (validation) {
+      setPhoneError(validation);
+      return;
+    }
+    setPhoneError("");
     setLoading(true);
-    const digits = phone.replace(/\D/g, "").slice(-10);
+    const digits = toBackendPhone(phone);
     const result = await sendOtp(digits);
     setLoading(false);
     if (!result.ok) {
@@ -49,7 +58,7 @@ function LoginForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const digits = phone.replace(/\D/g, "").slice(-10);
+    const digits = toBackendPhone(phone);
     const result = await loginWithOtp(digits, otp);
     setLoading(false);
     if (!result.ok) {
@@ -78,24 +87,25 @@ function LoginForm() {
             <label className="text-xs font-bold text-muted uppercase tracking-wider">
               Staff mobile
             </label>
-            <div className="mt-1 flex rounded-lg border border-beige/60 overflow-hidden">
-              <span className="px-3 flex items-center text-sm text-muted bg-surface border-r border-beige/40">
-                +91
-              </span>
-              <Input
-                type="tel"
-                inputMode="numeric"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                className="border-0 focus-visible:ring-0"
-                placeholder="9876543210"
-                required
-              />
-            </div>
+            <PhoneInput
+              id="staff-phone"
+              value={phone}
+              onChange={(v) => {
+                setPhone(v);
+                if (phoneError) setPhoneError("");
+              }}
+              error={phoneError}
+              required
+              className="mt-1"
+            />
           </div>
           {error && <p className="text-xs text-rose-700 font-semibold">{error}</p>}
           {info && <p className="text-xs text-emerald-700">{info}</p>}
-          <Button type="submit" className="w-full gap-2" disabled={loading || phone.length < 10}>
+          <Button
+            type="submit"
+            className="w-full gap-2"
+            disabled={loading || !isValidIndianMobile(phone)}
+          >
             <MessageCircle className="h-4 w-4" />
             {loading ? "Sending…" : "Send OTP"}
           </Button>
@@ -103,7 +113,7 @@ function LoginForm() {
       ) : (
         <form onSubmit={handleVerify} className="space-y-4">
           <p className="text-sm text-muted">
-            Code sent to <strong>+91 {phone.slice(-10)}</strong>
+            Code sent to <strong>+91 {toBackendPhone(phone)}</strong>
           </p>
           <Input
             value={otp}

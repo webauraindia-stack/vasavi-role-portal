@@ -193,6 +193,10 @@ export interface SupportTicket {
   priority: "low" | "medium" | "high";
   createdAt: string;
   hotelId: string;
+  /** Mock / future API fields */
+  category?: string;
+  description?: string;
+  bookingReference?: string;
 }
 
 export interface CommunityActivity {

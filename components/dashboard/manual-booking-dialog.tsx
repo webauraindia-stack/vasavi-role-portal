@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhoneField, toBackendPhone, isValidIndianMobile } from "@/lib/phone";
 import { Input } from "@/components/ui/input";
 import { Can } from "@/components/rbac/can";
 import {
@@ -195,8 +197,13 @@ export function ManualBookingDialog({
 
   const handleSubmit = async () => {
     setError(null);
-    if (!guestName.trim() || !guestPhone.trim()) {
-      setError("Guest name and phone are required.");
+    if (!guestName.trim()) {
+      setError("Guest name is required.");
+      return;
+    }
+    const phoneValidation = validatePhoneField(guestPhone);
+    if (phoneValidation) {
+      setError(phoneValidation);
       return;
     }
     if (!effectiveRoomId) {
@@ -212,7 +219,7 @@ export function ManualBookingDialog({
       hotelId: effectiveHotelId,
       hotelName: effectiveHotelName,
       guestName,
-      guestPhone,
+      guestPhone: toBackendPhone(guestPhone),
       guestType,
       roomId: effectiveRoomId,
       checkIn,
@@ -318,7 +325,12 @@ export function ManualBookingDialog({
                   <Input value={guestName} onChange={(e) => setGuestName(e.target.value)} />
                 </Field>
                 <Field label="Phone *">
-                  <Input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} />
+                  <PhoneInput
+                    id="manual-booking-phone"
+                    value={guestPhone}
+                    onChange={setGuestPhone}
+                    required
+                  />
                 </Field>
               </div>
 
@@ -496,7 +508,7 @@ export function ManualBookingDialog({
                     !effectiveRoomId ||
                     availableRooms.length === 0 ||
                     !guestName.trim() ||
-                    !guestPhone.trim()
+                    !isValidIndianMobile(guestPhone)
                   }
                   onClick={handleSubmit}
                   className="gap-2"

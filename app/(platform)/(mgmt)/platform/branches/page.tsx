@@ -11,6 +11,8 @@ import {
   type BackendBranch,
 } from "@/lib/api/branches";
 import { useAuthStore } from "@/stores/auth-store";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhoneField, toBackendPhone } from "@/lib/phone";
 
 export default function BranchesAdminPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -21,6 +23,7 @@ export default function BranchesAdminPage() {
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,10 +45,21 @@ export default function BranchesAdminPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
+    const validation = validatePhoneField(phone);
+    if (validation) {
+      setPhoneError(validation);
+      return;
+    }
+    setPhoneError("");
     setSubmitting(true);
     setError("");
     try {
-      await createBranch(accessToken, { name, city, address, phone });
+      await createBranch(accessToken, {
+        name,
+        city,
+        address,
+        phone: toBackendPhone(phone),
+      });
       setShowForm(false);
       setName("");
       setCity("");
@@ -110,11 +124,15 @@ export default function BranchesAdminPage() {
             </div>
             <div>
               <label className="font-medium">Phone</label>
-              <input
-                type="text"
+              <PhoneInput
+                id="branch-phone"
+                variant="admin"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2"
+                onChange={(v) => {
+                  setPhone(v);
+                  if (phoneError) setPhoneError("");
+                }}
+                error={phoneError}
                 required
               />
             </div>

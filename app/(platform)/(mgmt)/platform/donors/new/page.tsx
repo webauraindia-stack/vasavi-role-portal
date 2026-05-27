@@ -15,7 +15,8 @@ import type { BackendPurpose, BackendTier } from "@/lib/api/donors";
 import type { BackendBranch } from "@/lib/api/branches";
 import { useAdminStore } from "@/stores/admin-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { toBackendPhone } from "@/lib/phone";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhoneField, toBackendPhone } from "@/lib/phone";
 
 export default function NewDonorPage() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function NewDonorPage() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [donorId, setDonorId] = useState("");
   const [tierId, setTierId] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -66,6 +68,13 @@ export default function NewDonorPage() {
       setError("Missing tier or branch.");
       return;
     }
+
+    const phoneValidation = validatePhoneField(phone);
+    if (phoneValidation) {
+      setPhoneError(phoneValidation);
+      return;
+    }
+    setPhoneError("");
 
     const amount = Number(amountRupees);
     const receipts = receiptNumbers
@@ -146,11 +155,15 @@ export default function NewDonorPage() {
             </div>
             <div>
               <label className="text-sm font-medium">Phone</label>
-              <input
+              <PhoneInput
+                id="donor-phone"
+                variant="admin"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2"
-                placeholder="9876543210"
+                onChange={(v) => {
+                  setPhone(v);
+                  if (phoneError) setPhoneError("");
+                }}
+                error={phoneError}
                 required
               />
             </div>

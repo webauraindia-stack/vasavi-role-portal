@@ -18,6 +18,8 @@ import { useAuthStore, useAuthUser } from "@/stores/auth-store";
 import { hasPermission } from "@/lib/rbac";
 import { PLATFORM } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { validatePhoneField, toBackendPhone } from "@/lib/phone";
 
 type BranchTab = "overview" | "rooms" | "staff";
 
@@ -51,6 +53,7 @@ export default function BranchDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -114,10 +117,20 @@ export default function BranchDetailPage() {
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken || !branchId) return;
+    const validation = validatePhoneField(phone);
+    if (validation) {
+      setPhoneError(validation);
+      return;
+    }
+    setPhoneError("");
     setSubmitting(true);
     setError("");
     try {
-      const newAdmin = await createStaffAdmin(accessToken, { name, phone, email });
+      const newAdmin = await createStaffAdmin(accessToken, {
+        name,
+        phone: toBackendPhone(phone),
+        email,
+      });
       await assignAdminToBranch(accessToken, branchId, newAdmin.id);
       setShowForm(false);
       setName("");
@@ -259,11 +272,16 @@ export default function BranchDetailPage() {
                   </div>
                   <div>
                     <label className="font-medium">Phone number</label>
-                    <input
-                      type="text"
+                    <PhoneInput
+                      id="invite-staff-phone"
+                      variant="admin"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="mt-1 w-full rounded-lg border px-3 py-2 bg-white"
+                      onChange={(v) => {
+                        setPhone(v);
+                        if (phoneError) setPhoneError("");
+                      }}
+                      error={phoneError}
+                      inputClassName="bg-white"
                       required
                     />
                   </div>
