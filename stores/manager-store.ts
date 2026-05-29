@@ -13,7 +13,6 @@ import type {
 import { friendlyBookingError } from "@/lib/booking/booking-errors";
 import {
   buildManualBooking,
-  shouldMarkRoomOccupied,
   type ManualBookingInput,
 } from "@/lib/booking/manual-booking";
 import { notificationsFromBookings } from "@/lib/analytics/notifications";
@@ -215,11 +214,14 @@ export const useManagerStore = create<ManagerState>()(
               listBookings(accessToken, branchFilter),
             ]);
 
+            // Donor registry list is super-admin only on the API; branch staff must not call it.
             let donors: BackendDonorListItem[] = [];
-            try {
-              donors = await listDonors(accessToken);
-            } catch {
-              donors = [];
+            if (staffUser?.role === "super_admin") {
+              try {
+                donors = await listDonors(accessToken);
+              } catch {
+                donors = [];
+              }
             }
 
             const rooms = await listRoomInventory(accessToken, bookings, branchFilter);
@@ -546,10 +548,7 @@ export const useManagerStore = create<ManagerState>()(
               guest_count: input.guestCount ?? 1,
               guest_name: input.guestName,
               guest_phone: input.guestPhone,
-              notes: input.specialRequests,
               source: input.source,
-              record_cash_payment: input.paymentStatus === "paid" || input.paymentStatus === "free_stay",
-              check_in_immediately: input.bookingStatus === "checked_in",
             });
             const mapped = mapManagerBooking(created);
             // Optimistic insert; background refresh will correct any drift
@@ -568,14 +567,8 @@ export const useManagerStore = create<ManagerState>()(
         const { booking, error } = buildManualBooking(input, room, get().bookings);
         if (!booking || error) return { success: false, error: error ?? "Could not create booking." };
 
-        const markOccupied = shouldMarkRoomOccupied(booking.bookingStatus, booking.checkIn);
         set({
           bookings: [booking, ...get().bookings],
-          rooms: markOccupied
-            ? get().rooms.map((r) =>
-                r.id === room.id ? { ...r, status: "occupied" as const } : r
-              )
-            : get().rooms,
         });
         return { success: true, booking };
       },

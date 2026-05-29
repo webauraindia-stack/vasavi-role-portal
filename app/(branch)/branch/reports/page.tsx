@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   LineChart,
   Line,
@@ -10,14 +11,20 @@ import {
   CartesianGrid,
 } from "recharts";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { PeriodFilter } from "@/components/booking/period-filter";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
 import { useReportsAnalytics } from "@/hooks/use-analytics";
 import { chartPointsToDailyRevenue } from "@/lib/api/analytics";
+import type { BookingListQuery } from "@/lib/booking-filters";
 import { formatCurrency } from "@/lib/utils";
+import { PageContent } from "@/components/layout/page-content";
 
 export default function ReportsPage() {
   const { locked } = useHotelScope();
-  const { data, loading, error } = useReportsAnalytics();
+  const [periodQuery, setPeriodQuery] = useState<
+    Pick<BookingListQuery, "period" | "dateFrom" | "dateTo">
+  >({ period: "7d" });
+  const { data, loading, error } = useReportsAnalytics(periodQuery);
 
   const chartData = data?.revenue_chart
     ? chartPointsToDailyRevenue(data.revenue_chart)
@@ -30,10 +37,18 @@ export default function ReportsPage() {
         subtitle="Occupancy, festival rush, donation impact, and coupon redemption"
         hidePropertyBar={locked}
       />
-      <div className="p-6 space-y-6">
+      <PageContent>
         {error && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
+          </p>
+        )}
+
+        <PeriodFilter value={periodQuery} onChange={setPeriodQuery} />
+
+        {data?.period && (
+          <p className="text-xs text-muted">
+            Showing data for {data.period.start} – {data.period.end}
           </p>
         )}
 
@@ -59,7 +74,7 @@ export default function ReportsPage() {
 
         <div className="card-manager p-4">
           <h2 className="font-display text-base mb-4">Daily revenue trend</h2>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             {loading ? (
               <p className="text-sm text-muted">Loading chart…</p>
             ) : chartData.length === 0 ? (
@@ -101,7 +116,7 @@ export default function ReportsPage() {
             across your scoped bookings while supporting community stays and pilgrim visits.
           </p>
         </div>
-      </div>
+      </PageContent>
     </>
   );
 }

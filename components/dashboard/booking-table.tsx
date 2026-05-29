@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   CalendarRange,
   ChevronDown,
@@ -9,7 +9,6 @@ import {
   Eye,
   Home,
   Receipt,
-  Search,
   User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,16 +33,7 @@ import {
   formatDateTime,
 } from "@/lib/utils";
 
-const STATUS_TABS = [
-  { value: "all", label: "All" },
-  { value: "in_house", label: "In-house" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "pending", label: "Pending" },
-  { value: "checked_in", label: "Checked in" },
-  { value: "checked_out", label: "Departed" },
-] as const;
-
-type StatusTab = (typeof STATUS_TABS)[number]["value"];
+import type { BookingListSummary } from "@/lib/booking-filters";
 
 function sourceLabel(booking: ManagerBooking): string {
   if (booking.isInHouse) return "In-house (desk)";
@@ -61,6 +51,8 @@ function sourceLabel(booking: ManagerBooking): string {
 
 export function BookingList({
   bookings,
+  summary,
+  loading,
   onStatusChange,
   onRecordCash,
   onRefund,
@@ -68,6 +60,8 @@ export function BookingList({
   onExtendCheckout,
 }: {
   bookings: ManagerBooking[];
+  summary?: BookingListSummary | null;
+  loading?: boolean;
   onStatusChange?: (id: string, status: ManagerBooking["bookingStatus"], reason?: string) => Promise<{ ok: boolean; error?: string }>;
   onRecordCash?: (id: string) => Promise<{ ok: boolean; error?: string }>;
   onRefund?: (id: string) => void;
@@ -77,8 +71,6 @@ export function BookingList({
     newCheckOut: string
   ) => Promise<{ ok: boolean; error?: string }>;
 }) {
-  const [query, setQuery] = useState("");
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   // Dialog state
@@ -86,36 +78,6 @@ export function BookingList({
   const [dialogBusy, setDialogBusy] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const toast = useToast();
-
-  const filtered = useMemo(() => {
-    let list = bookings;
-    if (statusTab === "in_house") {
-      list = list.filter((b) => b.isInHouse);
-    } else if (statusTab !== "all") {
-      list = list.filter((b) => b.bookingStatus === statusTab);
-    }
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (b) =>
-          b.guestName.toLowerCase().includes(q) ||
-          b.reference.toLowerCase().includes(q) ||
-          b.roomNumber?.toLowerCase().includes(q) ||
-          b.guestPhone.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [bookings, query, statusTab]);
-
-  const stats = useMemo(
-    () => ({
-      total: bookings.length,
-      inHouse: bookings.filter((b) => b.isInHouse).length,
-      checkedIn: bookings.filter((b) => b.bookingStatus === "checked_in").length,
-      pending: bookings.filter((b) => b.bookingStatus === "pending").length,
-    }),
-    [bookings]
-  );
 
   const runAction = async (
     id: string,
@@ -162,49 +124,24 @@ export function BookingList({
         onConfirm={doCancel}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total bookings" value={stats.total} />
-        <StatCard label="In-house (desk)" value={stats.inHouse} tone="text-champagne-dark" />
-        <StatCard label="Guests checked in" value={stats.checkedIn} tone="text-blue-800" />
-        <StatCard label="Awaiting confirmation" value={stats.pending} tone="text-amber-800" />
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <StatCard label="Total bookings" value={summary?.total ?? bookings.length} />
+        <StatCard label="In-house (desk)" value={summary?.in_house ?? 0} tone="text-champagne-dark" />
+        <StatCard label="Guests checked in" value={summary?.checked_in ?? 0} tone="text-blue-800" />
+        <StatCard label="Awaiting confirmation" value={summary?.pending ?? 0} tone="text-amber-800" />
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search guest, reference, room, phone…"
-            className="pl-9 h-9"
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setStatusTab(tab.value)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
-                statusTab === tab.value
-                  ? "bg-champagne text-white"
-                  : "bg-white border border-beige/60 text-muted hover:text-charcoal"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
+      {loading ? (
         <div className="card-manager py-16 text-center">
-          <p className="text-sm text-muted">No bookings match your search or filters.</p>
+          <p className="text-sm text-muted">Loading bookings…</p>
+        </div>
+      ) : bookings.length === 0 ? (
+        <div className="card-manager py-16 text-center">
+          <p className="text-sm text-muted">No bookings match your filters.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((booking) => {
+          {bookings.map((booking) => {
             const expanded = expandedId === booking.id;
             const isBusy = actionBusyId === booking.id;
 
@@ -213,8 +150,8 @@ export function BookingList({
                 key={booking.id}
                 className="card-manager overflow-hidden transition-shadow hover:shadow-md"
               >
-                <div className="grid gap-4 p-4 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:items-center">
-                  <div className="flex items-start gap-3 min-w-0">
+                <div className="flex flex-col gap-4 p-4 lg:grid lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:items-center lg:gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-champagne/15 text-sm font-bold text-champagne-dark">
                       {booking.guestName
                         .split(" ")
@@ -275,7 +212,7 @@ export function BookingList({
                     </Badge>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
+                  <div className="flex flex-col gap-2 border-t border-beige/40 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-1.5 sm:border-0 sm:pt-0 lg:justify-end">
                     {canRecordCash(booking) && onRecordCash && (
                       <Button
                         variant="gold"
@@ -558,28 +495,48 @@ export function BookingTable({
 }) {
   if (compact) {
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-beige/50 text-left text-[10px] font-bold uppercase text-muted">
-              <th className="py-2 px-3">Guest</th>
-              <th className="py-2 px-3">Stay</th>
-              <th className="py-2 px-3">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b.id} className="border-b border-beige/30">
-                <td className="py-2 px-3 font-bold">{b.guestName}</td>
-                <td className="py-2 px-3 text-xs text-muted">
+      <>
+        <ul className="divide-y divide-beige/40 md:hidden">
+          {bookings.map((b) => (
+            <li key={b.id} className="flex items-start justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="truncate font-bold text-charcoal">{b.guestName}</p>
+                <p className="text-[10px] font-mono text-muted">{b.reference}</p>
+                <p className="mt-1 text-xs text-muted">
                   {formatDate(b.checkIn)} – {formatDate(b.checkOut)}
-                </td>
-                <td className="py-2 px-3 font-mono">{b.finalAmountDisplay || formatCurrency(b.finalAmountPaise / 100)}</td>
+                </p>
+              </div>
+              <p className="shrink-0 font-mono text-sm font-bold">
+                {b.finalAmountDisplay || formatCurrency(b.finalAmountPaise / 100)}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-beige/50 text-left text-[10px] font-bold uppercase text-muted">
+                <th className="px-3 py-2">Guest</th>
+                <th className="px-3 py-2">Stay</th>
+                <th className="px-3 py-2">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {bookings.map((b) => (
+                <tr key={b.id} className="border-b border-beige/30">
+                  <td className="px-3 py-2 font-bold">{b.guestName}</td>
+                  <td className="px-3 py-2 text-xs text-muted">
+                    {formatDate(b.checkIn)} – {formatDate(b.checkOut)}
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    {b.finalAmountDisplay || formatCurrency(b.finalAmountPaise / 100)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     );
   }
 

@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   CalendarClock,
   CreditCard,
+  User,
   ExternalLink,
   FileText,
   Headphones,
@@ -24,12 +25,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavItem, PortalUser } from "@/lib/rbac";
-import { OPS } from "@/lib/routes";
+import { useMobileNavClose } from "@/components/layout/portal-shell-frame";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   CalendarCheck,
   CalendarClock,
+  User,
   BedDouble,
   CreditCard,
   BarChart3,
@@ -48,10 +50,12 @@ function NavLink({
   item,
   pathname,
   unread,
+  onNavigate,
 }: {
   item: NavItem;
   pathname: string;
   unread: number;
+  onNavigate?: () => void;
 }) {
   const Icon = ICONS[item.icon] ?? LayoutDashboard;
   const active =
@@ -62,6 +66,7 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors",
         active
@@ -98,9 +103,10 @@ export function PortalSidebar({
   unread?: number;
 }) {
   const pathname = usePathname();
+  const closeMobileNav = useMobileNavClose();
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-white min-h-screen border-r border-champagne/20">
+    <aside className="flex h-full min-h-screen w-64 shrink-0 flex-col border-r border-champagne/20 bg-sidebar text-white lg:min-h-screen">
       <div className="p-5 border-b border-white/10">
         <p className="font-display text-champagne-dark text-lg font-bold tracking-tight">
           {title}
@@ -129,6 +135,7 @@ export function PortalSidebar({
                   item={item}
                   pathname={pathname}
                   unread={unread}
+                  onNavigate={closeMobileNav}
                 />
               ))}
             </div>
@@ -141,6 +148,7 @@ export function PortalSidebar({
                 item={item}
                 pathname={pathname}
                 unread={unread}
+                onNavigate={closeMobileNav}
               />
             ))}
           </div>

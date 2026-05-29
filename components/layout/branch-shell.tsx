@@ -5,7 +5,6 @@ import { useEffect, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BasePortalShell, usePortalGate } from "@/components/layout/base-portal-shell";
 import { PortalSidebar } from "@/components/layout/portal-sidebar";
-import { PortalTopBar } from "@/components/layout/portal-top-bar";
 import { BranchDataSync } from "@/components/sync/branch-data-sync";
 import { DataScopeProvider } from "@/contexts/data-scope-context";
 import { filterNav } from "@/lib/access";
@@ -31,6 +30,7 @@ function BranchShellInner({ children }: { children: ReactNode }) {
 
   return (
     <BasePortalShell
+      mobileTitle="Vasavi Branch"
       sidebar={
         <PortalSidebar
           user={user}
@@ -43,7 +43,6 @@ function BranchShellInner({ children }: { children: ReactNode }) {
       }
     >
       <BranchDataSync />
-      <PortalTopBar user={user} />
       {children}
     </BasePortalShell>
   );

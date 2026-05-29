@@ -173,6 +173,7 @@ export const ADMIN_PRESETS: Record<string, Permission[]> = {
 export const PORTAL_NAV: NavItem[] = [
   { href: "/branch", label: "Dashboard", icon: "LayoutDashboard", permission: "analytics.dashboard" },
   { href: "/branch/bookings", label: "Bookings", icon: "CalendarCheck", permission: "bookings.view" },
+  { href: "/branch/guests", label: "Guests", icon: "User", permission: "guests.view" },
   { href: "/branch/extensions", label: "Stay extensions", icon: "CalendarClock", permission: "bookings.extend" },
   { href: "/branch/payments", label: "Payments", icon: "CreditCard", permission: "payments.view" },
   { href: "/branch/reports", label: "Reports", icon: "BarChart3", permission: "analytics.bookings" },

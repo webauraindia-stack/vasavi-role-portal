@@ -20,7 +20,7 @@ export function StatsGrid({
 }) {
   if (loading || !stats) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="stat-card animate-pulse h-24 bg-beige/20" />
         ))}
@@ -32,7 +32,7 @@ export function StatsGrid({
     {
       label: "Collected today",
       value: stats.today_revenue_display,
-      sub: `${stats.today_collected_bookings ?? 0} payment(s) · 7d ${stats.revenue_7d_display ?? "—"}`,
+      sub: `${stats.today_collected_bookings ?? 0} payment(s) today · rolling 7d ${stats.revenue_7d_display ?? "—"}`,
       icon: IndianRupee,
       tone: "text-champagne",
     },
@@ -56,7 +56,7 @@ export function StatsGrid({
       tone: "text-charcoal",
     },
     {
-      label: "Donor savings (7d)",
+      label: "Donor savings (rolling 7d)",
       value: stats.donor_savings_display,
       icon: Crown,
       tone: "text-champagne-dark",
@@ -70,7 +70,7 @@ export function StatsGrid({
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
       {items.map((s) => {
         const Icon = s.icon;
         return (
@@ -79,7 +79,7 @@ export function StatsGrid({
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
               {s.label}
             </p>
-            <p className={cn("font-display text-xl font-bold", s.tone)}>{s.value}</p>
+            <p className={cn("font-display text-lg font-bold sm:text-xl", s.tone)}>{s.value}</p>
             {s.sub && <p className="text-[10px] text-muted">{s.sub}</p>}
           </div>
         );

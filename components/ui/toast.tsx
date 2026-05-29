@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -75,17 +76,22 @@ export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToast must be used inside <ToastProvider>");
 
-  return {
-    success: (title: string, message?: string) =>
-      ctx.addToast({ variant: "success", title, message }),
-    error: (title: string, message?: string) =>
-      ctx.addToast({ variant: "error", title, message, duration: 6000 }),
-    warning: (title: string, message?: string) =>
-      ctx.addToast({ variant: "warning", title, message, duration: 5000 }),
-    info: (title: string, message?: string) =>
-      ctx.addToast({ variant: "info", title, message }),
-    dismiss: ctx.removeToast,
-  };
+  const { addToast, removeToast } = ctx;
+
+  return useMemo(
+    () => ({
+      success: (title: string, message?: string) =>
+        addToast({ variant: "success", title, message }),
+      error: (title: string, message?: string) =>
+        addToast({ variant: "error", title, message, duration: 6000 }),
+      warning: (title: string, message?: string) =>
+        addToast({ variant: "warning", title, message, duration: 5000 }),
+      info: (title: string, message?: string) =>
+        addToast({ variant: "info", title, message }),
+      dismiss: removeToast,
+    }),
+    [addToast, removeToast]
+  );
 }
 
 // ---------------------------------------------------------------------------

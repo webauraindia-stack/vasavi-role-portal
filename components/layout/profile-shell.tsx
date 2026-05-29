@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { BasePortalShell, usePortalGate } from "@/components/layout/base-portal-shell";
 import { PortalSidebar } from "@/components/layout/portal-sidebar";
-import { PortalTopBar } from "@/components/layout/portal-top-bar";
 import { DataScopeProvider } from "@/contexts/data-scope-context";
 import { filterNav } from "@/lib/access";
 import { BRANCH_NAV } from "@/lib/navigation/branch-nav";
@@ -39,6 +38,7 @@ export function ProfileShell({ children }: { children: ReactNode }) {
 
   const shell = (
     <BasePortalShell
+      mobileTitle={isSuperAdmin ? "Vasavi Platform" : "Vasavi Branch"}
       sidebar={
         <PortalSidebar
           user={user}
@@ -50,7 +50,6 @@ export function ProfileShell({ children }: { children: ReactNode }) {
         />
       }
     >
-      <PortalTopBar user={user} />
       {children}
     </BasePortalShell>
   );

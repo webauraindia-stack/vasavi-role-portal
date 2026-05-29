@@ -1,5 +1,10 @@
 import { apiFetch } from "@/lib/api/client";
-import { fetchAllResults } from "@/lib/api/paginate";
+import { fetchAllResults, fetchPage } from "@/lib/api/paginate";
+import {
+  buildBookingQueryString,
+  type BookingListQuery,
+  type BookingListSummary,
+} from "@/lib/booking-filters";
 import type { BookingStatus, ManagerBooking, PaymentStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -145,20 +150,91 @@ export function mapManagerBooking(b: BackendBooking): ManagerBooking {
 // API functions
 // ---------------------------------------------------------------------------
 
-function bookingsListPath(branchId?: string): string {
-  if (!branchId) return "bookings/";
-  return `bookings/?branch_id=${encodeURIComponent(branchId)}`;
+type BookingsListPage = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: BackendBooking[];
+  summary?: BookingListSummary;
+};
+
+function bookingsListPath(query: BookingListQuery): string {
+  const qs = buildBookingQueryString(query);
+  return `bookings/${qs}`;
 }
 
+/** Unfiltered / legacy load (used by store refresh for rooms & notifications). */
 export async function listBookings(
   accessToken: string,
   branchId?: string
 ): Promise<ManagerBooking[]> {
-  const rows = await fetchAllResults<BackendBooking>(
-    bookingsListPath(branchId),
-    accessToken
-  );
-  return rows.map(mapManagerBooking);
+  const query: BookingListQuery = { branchId, period: "30d" };
+  return (await listBookingsFiltered(accessToken, query)).bookings;
+}
+
+export async function listBookingsFiltered(
+  accessToken: string,
+  query: BookingListQuery,
+  options?: { maxResults?: number }
+): Promise<{ bookings: ManagerBooking[]; summary?: BookingListSummary }> {
+  const basePath = bookingsListPath({ ...query, includeSummary: true });
+  const pageSize = options?.maxResults && options.maxResults < 100 ? options.maxResults : 100;
+  const items: BackendBooking[] = [];
+  let summary: BookingListSummary | undefined;
+  let page = 1;
+
+  for (;;) {
+    const data = (await fetchPage<BackendBooking>(
+      basePath,
+      accessToken,
+      page,
+      pageSize
+    )) as BookingsListPage;
+    if (page === 1) {
+      summary = data.summary;
+    }
+    items.push(...(data.results ?? []));
+    if (options?.maxResults && items.length >= options.maxResults) {
+      break;
+    }
+    if (!data.next) break;
+    page += 1;
+    if (page > 50) break;
+  }
+
+  return {
+    bookings: items.map(mapManagerBooking),
+    summary,
+  };
+}
+
+function apiBase(): string {
+  if (typeof window === "undefined") {
+    return `${process.env.BACKEND_URL ?? "http://localhost:8000"}/api/v1`;
+  }
+  return "/api/backend";
+}
+
+export async function exportBookingsCsv(
+  accessToken: string,
+  query: BookingListQuery
+): Promise<void> {
+  const qs = buildBookingQueryString(query).replace(/^\?/, "");
+  const res = await fetch(`${apiBase()}/staff/bookings/export/${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error("Could not export bookings.");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bookings-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function getBooking(accessToken: string, id: string): Promise<ManagerBooking> {

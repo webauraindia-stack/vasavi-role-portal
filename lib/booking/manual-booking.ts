@@ -29,10 +29,7 @@ export interface ManualBookingInput {
   roomId: string;
   checkIn: string;
   checkOut: string;
-  paymentStatus: PaymentStatus;
-  bookingStatus: "confirmed" | "checked_in";
   source: "walk_in" | "phone";
-  specialRequests?: string;
   guestCount?: number;
   createdBy?: string;
 }
@@ -234,9 +231,9 @@ export function buildManualBooking(
     baseAmountPaise: Math.round(pricing.subtotal * 100),
     discountAmountPaise: Math.round(discountRupees * 100),
     finalAmountPaise: Math.round(finalRupees * 100),
-    paymentStatus: isFreeStay ? "free_stay" : input.paymentStatus,
-    bookingStatus: input.bookingStatus,
-    notes: input.specialRequests?.trim() || undefined,
+    paymentStatus: isFreeStay ? "free_stay" : "unpaid",
+    bookingStatus: "confirmed",
+    notes: undefined,
     source: input.source === "walk_in" || input.source === "phone" ? "in_house" : input.source,
     isInHouse: true,
     refundAmount: 0,

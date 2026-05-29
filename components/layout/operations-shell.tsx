@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { BasePortalShell, usePortalGate } from "@/components/layout/base-portal-shell";
 import { PortalSidebar } from "@/components/layout/portal-sidebar";
-import { PortalTopBar } from "@/components/layout/portal-top-bar";
 import { OpsDataSync } from "@/components/sync/ops-data-sync";
 import { DataScopeProvider } from "@/contexts/data-scope-context";
 import { filterNav } from "@/lib/access";
@@ -34,6 +33,7 @@ function OperationsShellInner({ children }: { children: ReactNode }) {
 
   return (
     <BasePortalShell
+      mobileTitle="Vasavi Operations"
       sidebar={
         <PortalSidebar
           user={user}
@@ -46,7 +46,6 @@ function OperationsShellInner({ children }: { children: ReactNode }) {
       }
     >
       <OpsDataSync />
-      <PortalTopBar user={user} />
       {children}
     </BasePortalShell>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -11,12 +12,17 @@ import {
 import { PermissionGuard } from "@/components/rbac/permission-guard";
 import { Can } from "@/components/rbac/can";
 import { PlatformModuleHeader } from "@/components/admin/platform-module-header";
+import { PeriodFilter } from "@/components/booking/period-filter";
 import { useFinanceAnalytics } from "@/hooks/use-analytics";
 import { useHotelScope } from "@/hooks/use-hotel-scope";
+import type { BookingListQuery } from "@/lib/booking-filters";
 
 export default function FinanceAdminPage() {
   const { viewAll } = useHotelScope();
-  const { data, loading, error } = useFinanceAnalytics();
+  const [periodQuery, setPeriodQuery] = useState<
+    Pick<BookingListQuery, "period" | "dateFrom" | "dateTo">
+  >({ period: "30d" });
+  const { data, loading, error } = useFinanceAnalytics(periodQuery);
 
   return (
     <PermissionGuard
@@ -40,6 +46,14 @@ export default function FinanceAdminPage() {
         {error && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
+          </p>
+        )}
+
+        <PeriodFilter value={periodQuery} onChange={setPeriodQuery} />
+
+        {data?.period && (
+          <p className="text-xs text-muted -mt-2">
+            {data.period.start} – {data.period.end}
           </p>
         )}
 

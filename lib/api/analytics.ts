@@ -1,5 +1,8 @@
 import { apiFetch } from "@/lib/api/client";
+import { buildAnalyticsQueryString } from "@/lib/booking-filters";
+import type { BookingListQuery } from "@/lib/booking-filters";
 import type { DailyRevenue } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
 export type RevenueChartPoint = {
   date: string;
@@ -28,12 +31,25 @@ export type DashboardAnalyticsStats = {
   occupancy_percent: number;
 };
 
+export type AnalyticsPeriod = {
+  start: string;
+  end: string;
+};
+
+export type DashboardCollectionsChart = {
+  period: AnalyticsPeriod;
+  revenue_chart: RevenueChartPoint[];
+};
+
+/** @deprecated Combined payload; prefer separate stats + collections endpoints. */
 export type DashboardAnalytics = {
+  period?: AnalyticsPeriod | null;
   stats: DashboardAnalyticsStats;
   revenue_chart: RevenueChartPoint[];
 };
 
 export type ReportsAnalytics = {
+  period?: AnalyticsPeriod | null;
   coupon_redemptions: number;
   free_stays: number;
   total_discount_paise: number;
@@ -42,6 +58,7 @@ export type ReportsAnalytics = {
 };
 
 export type FinanceAnalytics = {
+  period?: AnalyticsPeriod | null;
   collected_paise: number;
   collected_display: string;
   paid_bookings: number;
@@ -49,6 +66,9 @@ export type FinanceAnalytics = {
   pending_display: string;
   unpaid_bookings: number;
   refunds_queue: number;
+  discounts_paise: number;
+  discounts_display: string;
+  free_stays: number;
 };
 
 export type DonorAnalytics = {
@@ -67,47 +87,80 @@ export type DonorAnalytics = {
   }[];
 };
 
-function branchQuery(branchId?: string): string {
-  if (!branchId || branchId === "all") return "";
-  return `?branch_id=${encodeURIComponent(branchId)}`;
+type AnalyticsQuery = Pick<BookingListQuery, "branchId" | "period" | "dateFrom" | "dateTo">;
+
+function analyticsPath(path: string, query?: AnalyticsQuery): string {
+  const qs = query ? buildAnalyticsQueryString(query) : "";
+  return `${path}${qs}`;
 }
 
-/** Map API chart points to Recharts-friendly daily revenue rows. */
+/** Map API chart points to Recharts-friendly daily revenue rows (x-axis = calendar date). */
 export function chartPointsToDailyRevenue(points: RevenueChartPoint[]): DailyRevenue[] {
   return points.map((p) => ({
-    date: p.label,
+    date: formatDate(p.date),
     revenue: p.revenue_rupees,
     donorSavings: p.donor_savings_rupees,
     bookings: p.bookings,
   }));
 }
 
-export async function fetchDashboardAnalytics(
+export async function fetchDashboardStats(
   accessToken: string,
-  branchId?: string
-): Promise<DashboardAnalytics> {
-  return apiFetch<DashboardAnalytics>(
-    `staff/analytics/dashboard/${branchQuery(branchId)}`,
+  query: Pick<AnalyticsQuery, "branchId"> = {}
+): Promise<DashboardAnalyticsStats> {
+  return apiFetch<DashboardAnalyticsStats>(
+    analyticsPath("staff/analytics/dashboard/", query),
     { method: "GET", accessToken }
   );
 }
 
+export async function fetchDashboardCollectionsChart(
+  accessToken: string,
+  query: AnalyticsQuery = { period: "7d" }
+): Promise<DashboardCollectionsChart> {
+  return apiFetch<DashboardCollectionsChart>(
+    analyticsPath("staff/analytics/dashboard/collections/", {
+      ...query,
+      period: query.period ?? "7d",
+    }),
+    { method: "GET", accessToken }
+  );
+}
+
+/** @deprecated Use fetchDashboardStats + fetchDashboardCollectionsChart. */
+export async function fetchDashboardAnalytics(
+  accessToken: string,
+  query: AnalyticsQuery = { period: "7d" }
+): Promise<DashboardAnalytics> {
+  const [stats, chart] = await Promise.all([
+    fetchDashboardStats(accessToken, query),
+    fetchDashboardCollectionsChart(accessToken, query),
+  ]);
+  return { stats, period: chart.period, revenue_chart: chart.revenue_chart };
+}
+
 export async function fetchReportsAnalytics(
   accessToken: string,
-  branchId?: string
+  query: AnalyticsQuery = { period: "7d" }
 ): Promise<ReportsAnalytics> {
   return apiFetch<ReportsAnalytics>(
-    `staff/analytics/reports/${branchQuery(branchId)}`,
+    analyticsPath("staff/analytics/reports/", {
+      ...query,
+      period: query.period ?? "7d",
+    }),
     { method: "GET", accessToken }
   );
 }
 
 export async function fetchFinanceAnalytics(
   accessToken: string,
-  branchId?: string
+  query: AnalyticsQuery = { period: "30d" }
 ): Promise<FinanceAnalytics> {
   return apiFetch<FinanceAnalytics>(
-    `staff/analytics/finance/${branchQuery(branchId)}`,
+    analyticsPath("staff/analytics/finance/", {
+      ...query,
+      period: query.period ?? "30d",
+    }),
     { method: "GET", accessToken }
   );
 }

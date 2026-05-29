@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { SessionKeeper } from "@/components/auth/session-keeper";
 import { SessionStatusBar } from "@/components/auth/session-status-bar";
+import { PortalShellFrame } from "@/components/layout/portal-shell-frame";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { useAuthStore } from "@/stores/auth-store";
 import { canAccessPath } from "@/lib/access";
@@ -106,9 +107,12 @@ export function usePortalGate() {
 export function BasePortalShell({
   sidebar,
   children,
+  mobileTitle = "Vasavi Portal",
 }: {
   sidebar: ReactNode;
   children: ReactNode;
+  /** Shown in the mobile app bar. */
+  mobileTitle?: string;
 }) {
   const signOut = useSignOut();
   const gate = usePortalGate();
@@ -138,14 +142,13 @@ export function BasePortalShell({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <>
       <SessionStatusBar />
       <SessionKeeper />
-      {sidebar}
-      <div className="flex flex-1 min-w-0 flex-col">
-        <main className="flex-1 min-w-0 bg-surface">{children}</main>
-      </div>
-    </div>
+      <PortalShellFrame sidebar={sidebar} user={gate.user} mobileTitle={mobileTitle}>
+        {children}
+      </PortalShellFrame>
+    </>
   );
 }
 

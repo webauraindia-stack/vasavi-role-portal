@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, BedDouble, Building2, UserCog, Plus, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { PlatformModuleHeader } from "@/components/platform/platform-module-header";
+import { PlatformModuleHeader } from "@/components/admin/platform-module-header";
 import { BranchRoomsPanel } from "@/components/admin/branch-rooms-panel";
 import {
   listStaffAdmins,

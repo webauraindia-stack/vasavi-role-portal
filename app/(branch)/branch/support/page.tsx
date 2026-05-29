@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Ticket } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { CreateSupportTicketDialog } from "@/components/support/create-support-ticket-dialog";
@@ -9,32 +9,81 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { useAuthStore } from "@/stores/auth-store";
+import { createSupportTicket, listSupportTickets } from "@/lib/api/support";
 import type { SupportTicket } from "@/lib/types";
 
 export default function SupportPage() {
   const { hotelId } = useHotelScope();
   const toast = useToast();
-  const [mockTickets, setMockTickets] = useState<SupportTicket[]>([]);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
-  const scopedHotelId = hotelId === "all" ? "all" : hotelId;
+  useEffect(() => {
+    if (!accessToken) {
+      setTickets([]);
+      setLoading(false);
+      return;
+    }
 
-  const tickets = useMemo(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    void listSupportTickets(accessToken)
+      .then((rows) => {
+        if (!cancelled) setTickets(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toastRef.current.error(
+            err instanceof Error ? err.message : "Could not load support tickets."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const scopedTickets = useMemo(() => {
     const scoped =
       hotelId === "all"
-        ? mockTickets
-        : mockTickets.filter((t) => t.hotelId === hotelId || t.hotelId === "all");
+        ? tickets
+        : tickets.filter((t) => t.hotelId === hotelId || t.hotelId === "all");
     return [...scoped].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [mockTickets, hotelId]);
+  }, [tickets, hotelId]);
 
-  const handleSubmit = (ticket: SupportTicket) => {
-    setMockTickets((prev) => [ticket, ...prev]);
-    toast.success(
-      "Ticket created (mock)",
-      "Your report is saved locally. No backend call was made."
-    );
+  const handleSubmit = async (ticket: SupportTicket) => {
+    if (!accessToken) {
+      toast.error("Not signed in.");
+      return;
+    }
+    try {
+      const created = await createSupportTicket(accessToken, {
+        subject: ticket.subject,
+        description: ticket.description,
+        guest_name: ticket.guestName,
+        category: ticket.category,
+        booking_reference: ticket.bookingReference,
+        priority: ticket.priority,
+        hotel_id: ticket.hotelId === "all" ? null : ticket.hotelId,
+      });
+      setTickets((prev) => [created, ...prev]);
+      toast.success("Ticket created", "Your report was saved to the platform.");
+      setDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create ticket.");
+    }
   };
 
   return (
@@ -51,9 +100,11 @@ export default function SupportPage() {
               Your tickets
             </h2>
             <p className="text-sm text-charcoal/80 mt-0.5">
-              {tickets.length === 0
-                ? "No tickets yet"
-                : `${tickets.length} ticket${tickets.length === 1 ? "" : "s"}`}
+              {loading
+                ? "Loading…"
+                : scopedTickets.length === 0
+                  ? "No tickets yet"
+                  : `${scopedTickets.length} ticket${scopedTickets.length === 1 ? "" : "s"}`}
             </p>
           </div>
           <Button
@@ -66,7 +117,7 @@ export default function SupportPage() {
           </Button>
         </div>
 
-        {tickets.length === 0 ? (
+        {!loading && scopedTickets.length === 0 ? (
           <div className="card-manager p-8 sm:p-10 text-center space-y-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-champagne/10 text-champagne">
               <Ticket className="h-6 w-6" />
@@ -90,7 +141,7 @@ export default function SupportPage() {
           </div>
         ) : (
           <ul className="space-y-3">
-            {tickets.map((t) => (
+            {scopedTickets.map((t) => (
               <li key={t.id} className="card-manager p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
                   <div className="min-w-0 flex-1">
@@ -100,33 +151,20 @@ export default function SupportPage() {
                         {t.bookingReference}
                       </p>
                     )}
-                    <p className="text-xs text-muted mt-1">{t.guestName}</p>
                     {t.description && (
-                      <p className="text-sm text-charcoal/80 mt-2 leading-relaxed">
+                      <p className="text-sm text-charcoal/80 mt-2 leading-relaxed line-clamp-3">
                         {t.description}
                       </p>
                     )}
-                    <p className="text-[10px] text-muted mt-2">{formatDateTime(t.createdAt)}</p>
+                    <p className="text-xs text-muted mt-2">
+                      {t.guestName} · {formatDateTime(t.createdAt)}
+                    </p>
                   </div>
-                  <div className="flex flex-row sm:flex-col gap-1.5 sm:items-end shrink-0">
-                    <Badge
-                      className={
-                        t.status === "open"
-                          ? "bg-amber-100 text-amber-800"
-                          : t.status === "in_progress"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-emerald-100 text-emerald-800"
-                      }
-                    >
-                      {t.status.replace("_", " ")}
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <Badge className="capitalize border-charcoal/15 bg-white text-charcoal">
+                      {t.status.replace(/_/g, " ")}
                     </Badge>
-                    <Badge
-                      className={
-                        t.priority === "high"
-                          ? "bg-rose-50 text-rose-800 border-rose-200"
-                          : "bg-slate-50 text-slate-600"
-                      }
-                    >
+                    <Badge className="capitalize border-charcoal/15 bg-white text-muted">
                       {t.priority}
                     </Badge>
                   </div>
@@ -139,9 +177,9 @@ export default function SupportPage() {
 
       <CreateSupportTicketDialog
         open={dialogOpen}
-        hotelId={scopedHotelId}
+        hotelId={hotelId === "all" ? "all" : hotelId}
         onClose={() => setDialogOpen(false)}
-        onSubmit={handleSubmit}
+        onSubmit={(ticket) => void handleSubmit(ticket)}
       />
     </>
   );

@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { BasePortalShell, usePortalGate } from "@/components/layout/base-portal-shell";
 import { PortalSidebar } from "@/components/layout/portal-sidebar";
-import { PortalTopBar } from "@/components/layout/portal-top-bar";
 import { filterNav } from "@/lib/access";
 import { PLATFORM_NAV } from "@/lib/navigation/platform-nav";
 import { OPS_NAV } from "@/lib/navigation/ops-nav";
@@ -32,6 +31,7 @@ export function PlatformShell({ children }: { children: ReactNode }) {
 
   return (
     <BasePortalShell
+      mobileTitle="Vasavi Platform"
       sidebar={
         <PortalSidebar
           user={user}
@@ -42,7 +42,6 @@ export function PlatformShell({ children }: { children: ReactNode }) {
         />
       }
     >
-      <PortalTopBar user={user} />
       {children}
     </BasePortalShell>
   );

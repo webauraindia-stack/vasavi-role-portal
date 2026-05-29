@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { format, addDays } from "date-fns";
 import {
   AlertCircle,
@@ -17,9 +18,7 @@ import { validatePhoneField, toBackendPhone, isValidIndianMobile } from "@/lib/p
 import { Input } from "@/components/ui/input";
 import { Can } from "@/components/rbac/can";
 import {
-  calculateManualBookingPricing,
   calculateManualBookingPricingFromPaise,
-  checkRoomAvailableForDates,
   findAvailableRoomsForStay,
   guestTypeLabel,
   type ManualBookingInput,
@@ -30,7 +29,7 @@ import {
 } from "@/lib/api/staff-operations";
 import { useManagerStore } from "@/stores/manager-store";
 import { useAuthStore } from "@/stores/auth-store";
-import type { GuestType, PaymentStatus, RoomInventory } from "@/lib/types";
+import type { GuestType, RoomInventory } from "@/lib/types";
 import { cn, formatCurrency, GUEST_TYPE_COLORS } from "@/lib/utils";
 
 const GUEST_TYPES: GuestType[] = [
@@ -48,12 +47,14 @@ export function ManualBookingDialog({
   hotelId,
   hotelName,
   viewAll,
+  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   hotelId: string;
   hotelName: string;
   viewAll: boolean;
+  onCreated?: () => void;
 }) {
   const bookings = useManagerStore((s) => s.bookings);
   const rooms = useManagerStore((s) => s.rooms);
@@ -74,14 +75,17 @@ export function ManualBookingDialog({
   const [checkOut, setCheckOut] = useState(defaultOut);
   const [roomId, setRoomId] = useState("");
   const [source, setSource] = useState<"walk_in" | "phone">("walk_in");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("unpaid");
-  const [checkInNow, setCheckInNow] = useState(true);
-  const [specialRequests, setSpecialRequests] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successRef, setSuccessRef] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiSearchResults, setApiSearchResults] = useState<StaffRoomSearchResult[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const effectiveHotelId = hotelId === "all" ? propertyId : hotelId;
   const effectiveHotelName =
@@ -128,6 +132,16 @@ export function ManualBookingDialog({
       cancelled = true;
     };
   }, [accessToken, checkIn, checkOut, effectiveHotelId]);
+
+  useEffect(() => {
+    if (!open) return;
+    bodyRef.current?.scrollTo(0, 0);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   const availableRooms = useMemo(() => {
     if (!checkIn || !checkOut || checkOut <= checkIn) return [];
@@ -179,21 +193,29 @@ export function ManualBookingDialog({
     return availableRooms.some((a) => a.room.id === roomId) ? roomId : "";
   }, [availableRooms, roomId]);
 
-  const selectedRoom = rooms.find((r) => r.id === effectiveRoomId);
-  const selectedAvailability = selectedRoom
-    ? checkRoomAvailableForDates(selectedRoom, checkIn, checkOut, bookings)
-    : null;
+  const selectedEntry = useMemo(
+    () => availableRooms.find((a) => a.room.id === effectiveRoomId),
+    [availableRooms, effectiveRoomId]
+  );
 
-  const pricing = useMemo(() => {
-    if (!selectedRoom || !checkIn || !checkOut || checkOut <= checkIn) return null;
-    const nights = Math.max(
-      1,
-      Math.ceil(
-        (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)
-      )
-    );
-    return calculateManualBookingPricing(selectedRoom, nights, guestType);
-  }, [selectedRoom, checkIn, checkOut, guestType]);
+  const pricing = selectedEntry?.pricing ?? null;
+
+  const canSubmit =
+    Boolean(guestName.trim()) &&
+    isValidIndianMobile(guestPhone) &&
+    Boolean(effectiveRoomId) &&
+    availableRooms.length > 0 &&
+    checkOut > checkIn &&
+    !submitting;
+
+  const submitHint = useMemo(() => {
+    if (submitting) return null;
+    if (!guestName.trim()) return "Enter guest name to continue.";
+    if (!isValidIndianMobile(guestPhone)) return "Enter a valid 10-digit mobile number.";
+    if (!effectiveRoomId) return "Tap a room below to select it.";
+    if (checkOut <= checkIn) return "Checkout must be after check-in.";
+    return null;
+  }, [guestName, guestPhone, effectiveRoomId, checkOut, checkIn, submitting]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -224,10 +246,7 @@ export function ManualBookingDialog({
       roomId: effectiveRoomId,
       checkIn,
       checkOut,
-      paymentStatus: guestType === "free_stay_eligible" ? "free_stay" : paymentStatus,
-      bookingStatus: checkInNow ? "checked_in" : "confirmed",
       source,
-      specialRequests,
     };
 
     setSubmitting(true);
@@ -240,10 +259,11 @@ export function ManualBookingDialog({
     }
 
     setSuccessRef(result.booking?.reference ?? null);
+    onCreated?.();
   };
 
   const handleClose = () => {
-    setPropertyId(hotelId === "all" ? "1" : hotelId);
+    setPropertyId(hotelId === "all" ? (branches[0]?.id ?? "") : hotelId);
     setGuestName("");
     setGuestPhone("");
     setGuestType("visitor");
@@ -251,29 +271,36 @@ export function ManualBookingDialog({
     setCheckOut(defaultOut);
     setRoomId("");
     setSource("walk_in");
-    setPaymentStatus("unpaid");
-    setCheckInNow(true);
-    setSpecialRequests("");
     setError(null);
     setSuccessRef(null);
     onClose();
   };
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  const dialog = (
     <Can permission={["bookings.create", "rooms.view"]}>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain">
         <button
           type="button"
-          className="absolute inset-0 bg-charcoal/40 backdrop-blur-sm"
-          aria-label="Close"
+          className="fixed inset-0 bg-charcoal/40 backdrop-blur-sm"
+          aria-label="Close dialog"
           onClick={handleClose}
         />
-        <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-beige/60 bg-white shadow-xl">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-beige/40 bg-white px-5 py-4">
+        <div className="relative z-10 flex min-h-full items-center justify-center p-4 sm:p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-booking-title"
+            className="flex w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-beige/60 bg-white shadow-xl max-h-[calc(100dvh-2rem)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <div className="flex shrink-0 items-center justify-between border-b border-beige/40 bg-white px-5 py-4">
             <div>
-              <h2 className="font-display text-xl text-charcoal flex items-center gap-2">
+              <h2
+                id="manual-booking-title"
+                className="font-display text-xl text-charcoal flex items-center gap-2"
+              >
                 <UserPlus className="h-5 w-5 text-champagne" />
                 Manual booking
               </h2>
@@ -300,7 +327,8 @@ export function ManualBookingDialog({
               <Button onClick={handleClose}>Done</Button>
             </div>
           ) : (
-            <div className="p-5 space-y-5">
+            <>
+            <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto p-5 space-y-5">
               {viewAll && hotelId === "all" && (
                 <Field label="Property">
                   <select
@@ -322,7 +350,11 @@ export function ManualBookingDialog({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Guest name *">
-                  <Input value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+                  <Input
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Full name"
+                  />
                 </Field>
                 <Field label="Phone *">
                   <PhoneInput
@@ -338,7 +370,10 @@ export function ManualBookingDialog({
                 <Field label="Guest type">
                   <select
                     value={guestType}
-                    onChange={(e) => setGuestType(e.target.value as GuestType)}
+                    onChange={(e) => {
+                      setGuestType(e.target.value as GuestType);
+                      setRoomId("");
+                    }}
                     className="w-full h-9 rounded-lg border border-beige/60 px-3 text-sm"
                   >
                     {GUEST_TYPES.map((t) => (
@@ -363,7 +398,10 @@ export function ManualBookingDialog({
                     type="date"
                     value={checkIn}
                     min={today}
-                    onChange={(e) => setCheckIn(e.target.value)}
+                    onChange={(e) => {
+                      setCheckIn(e.target.value);
+                      setRoomId("");
+                    }}
                   />
                 </Field>
                 <Field label="Check-out">
@@ -371,7 +409,10 @@ export function ManualBookingDialog({
                     type="date"
                     value={checkOut}
                     min={checkIn || today}
-                    onChange={(e) => setCheckOut(e.target.value)}
+                    onChange={(e) => {
+                      setCheckOut(e.target.value);
+                      setRoomId("");
+                    }}
                   />
                 </Field>
               </div>
@@ -406,13 +447,27 @@ export function ManualBookingDialog({
                         type="button"
                         onClick={() => setRoomId(room.id)}
                         className={cn(
-                          "flex items-center justify-between gap-3 rounded-lg border p-3 text-left text-sm transition-colors",
+                          "flex items-center justify-between gap-3 rounded-lg border-2 p-3 text-left text-sm transition-colors",
                           effectiveRoomId === room.id
-                            ? "border-champagne bg-champagne/10"
+                            ? "border-champagne bg-champagne/15 ring-2 ring-champagne/30"
                             : "border-beige/50 hover:border-champagne/40"
                         )}
+                        aria-pressed={effectiveRoomId === room.id}
                       >
                         <div className="flex items-start gap-2 min-w-0">
+                          <span
+                            className={cn(
+                              "mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                              effectiveRoomId === room.id
+                                ? "border-champagne bg-champagne"
+                                : "border-beige/80 bg-white"
+                            )}
+                            aria-hidden
+                          >
+                            {effectiveRoomId === room.id && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                            )}
+                          </span>
                           <BedDouble className="h-4 w-4 text-champagne shrink-0 mt-0.5" />
                           <div>
                             <p className="font-bold text-charcoal">
@@ -431,9 +486,6 @@ export function ManualBookingDialog({
                   </div>
                 )}
 
-                {selectedRoom && selectedAvailability && !selectedAvailability.available && (
-                  <p className="text-sm text-rose-700">{selectedAvailability.reason}</p>
-                )}
               </div>
 
               {pricing && (
@@ -451,40 +503,6 @@ export function ManualBookingDialog({
                 </div>
               )}
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Payment collection">
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-                    disabled={guestType === "free_stay_eligible"}
-                    className="w-full h-9 rounded-lg border border-beige/60 px-3 text-sm disabled:opacity-50"
-                  >
-                    <option value="unpaid">Pay at front desk (Unpaid)</option>
-                    <option value="paid">Already paid in full (Cash/UPI)</option>
-                  </select>
-                </Field>
-                <Field label="On arrival">
-                  <label className="flex items-center gap-2 h-9 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checkInNow}
-                      onChange={(e) => setCheckInNow(e.target.checked)}
-                      className="rounded border-beige"
-                      disabled={paymentStatus !== "paid"} // Requires paid status
-                    />
-                    Check guest in immediately {paymentStatus !== "paid" && "(Requires payment)"}
-                  </label>
-                </Field>
-              </div>
-
-              <Field label="Special requests">
-                <Input
-                  value={specialRequests}
-                  onChange={(e) => setSpecialRequests(e.target.value)}
-                  placeholder="Early check-in, extra bedding, etc."
-                />
-              </Field>
-
               {guestType !== "visitor" && (
                 <Badge className={cn("text-[10px]", GUEST_TYPE_COLORS[guestType])}>
                   {guestTypeLabel(guestType)} pricing applied
@@ -497,22 +515,17 @@ export function ManualBookingDialog({
                   {error}
                 </p>
               )}
+            </div>
 
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-beige/40">
+            <div className="shrink-0 space-y-2 border-t border-beige/40 bg-white px-5 py-4">
+              {submitHint && (
+                <p className="text-xs text-muted">{submitHint}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={handleClose}>
                   Cancel
                 </Button>
-                <Button
-                  disabled={
-                    submitting ||
-                    !effectiveRoomId ||
-                    availableRooms.length === 0 ||
-                    !guestName.trim() ||
-                    !isValidIndianMobile(guestPhone)
-                  }
-                  onClick={handleSubmit}
-                  className="gap-2"
-                >
+                <Button disabled={!canSubmit} onClick={handleSubmit} className="gap-2">
                   {submitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -524,11 +537,15 @@ export function ManualBookingDialog({
                 </Button>
               </div>
             </div>
+            </>
           )}
+          </div>
         </div>
       </div>
     </Can>
   );
+
+  return createPortal(dialog, document.body);
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -556,10 +573,12 @@ export function ManualBookingTrigger({
   hotelId,
   hotelName,
   viewAll,
+  onCreated,
 }: {
   hotelId: string;
   hotelName: string;
   viewAll: boolean;
+  onCreated?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
@@ -574,8 +593,9 @@ export function ManualBookingTrigger({
           setOpen(true);
         }}
       >
-        <UserPlus className="h-3.5 w-3.5" />
-        New manual booking
+        <UserPlus className="h-3.5 w-3.5 shrink-0" />
+        <span className="hidden sm:inline">New manual booking</span>
+        <span className="sm:hidden">New booking</span>
       </Button>
       <ManualBookingDialog
         key={formKey}
@@ -584,6 +604,7 @@ export function ManualBookingTrigger({
         hotelId={hotelId}
         hotelName={hotelName}
         viewAll={viewAll}
+        onCreated={onCreated}
       />
     </Can>
   );
